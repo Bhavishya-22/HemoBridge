@@ -1,10 +1,26 @@
+import "../index.css";
+import { Routes, Route } from "react-router-dom";
 
-function App() {
+import Navbar from "./components/Navbar";
+
+import Home from "./pages/Home";
+import DonateBloodPage from "./pages/DonateBloodPage";
+import RequestBloodPage from "./pages/RequestBloodPage";
+import FAQPage from "./pages/FAQPage";
+import ProfilePage from "./pages/ProfilePage";
+
+export default function App() {
   return (
     <>
-    <h1>Blood Bank</h1>
-      </>
-  )
-}
+      <Navbar />
 
-export default App
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/request" element={<RequestBloodPage />} />
+        <Route path="/donate" element={<DonateBloodPage />} />
+        <Route path="/faq" element={<FAQPage />} />
+        <Route path="/profile" element={<ProfilePage />} />
+      </Routes>
+    </>
+  );
+}

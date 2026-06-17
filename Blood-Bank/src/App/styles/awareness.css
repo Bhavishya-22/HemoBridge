@@ -1,0 +1,16 @@
+  /* ── AWARENESS ── */
+  .awareness-bg { background: var(--slate); }
+  .awareness-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 1.25rem; margin-bottom: 2rem; }
+  .aware-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: var(--radius-lg); padding: 1.75rem; transition: background 0.2s; }
+  .aware-card:hover { background: rgba(255,255,255,0.09); }
+  .aware-icon { font-size: 1.75rem; margin-bottom: 0.75rem; display: block; }
+  .aware-title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--white); margin-bottom: 0.5rem; }
+  .aware-desc { font-size: 0.875rem; color: rgba(255,255,255,0.55); line-height: 1.65; }
+  .btn-outline-white {
+    padding: 0.7rem 1.75rem; border-radius: var(--radius-md);
+    background: transparent; color: var(--white);
+    font-family: var(--font-display); font-weight: 600; font-size: 0.9rem;
+    border: 1.5px solid rgba(255,255,255,0.35); cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-outline-white:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.6); }

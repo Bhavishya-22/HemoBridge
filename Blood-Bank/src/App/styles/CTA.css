@@ -1,0 +1,7 @@
+  /* ── CTA ── */
+  .cta-section { background: var(--surface); padding: 5rem 2rem; text-align: center; border-top: 1.5px solid var(--border); }
+  .cta-inner { max-width: 600px; margin: 0 auto; }
+  .cta-title { font-family: var(--font-display); font-size: clamp(1.8rem, 3.5vw, 2.6rem); font-weight: 700; color: var(--slate); margin-bottom: 1rem; }
+  .cta-title em { font-style: normal; color: var(--crimson); }
+  .cta-sub { font-size: 1rem; color: var(--muted); margin-bottom: 2.25rem; }
+  .cta-btns { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }

@@ -1,0 +1,10 @@
+ /* ── WHY DONATE ── */
+  .why-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; }
+  .why-card {
+    background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius-lg);
+    padding: 1.75rem; transition: all 0.25s;
+  }
+  .why-card:hover { border-color: var(--crimson); box-shadow: var(--shadow-md); }
+  .why-icon { font-size: 2rem; margin-bottom: 0.75rem; display: block; }
+  .why-title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--slate); margin-bottom: 0.5rem; }
+  .why-desc { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
