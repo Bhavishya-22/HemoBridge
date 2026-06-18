@@ -1,7 +1,15 @@
 export default function DonateBloodPage() {
   return (
-    <div>
-      <h1>Donate Blood</h1>
+    <div
+      style={{
+        marginTop: "100px",
+        background: "red",
+        color: "white",
+        fontSize: "40px",
+        padding: "20px",
+      }}
+    >
+      DONATE BLOOD PAGE
     </div>
   );
 }
