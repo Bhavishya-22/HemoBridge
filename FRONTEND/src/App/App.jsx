@@ -1,4 +1,4 @@
-console.log("App.jsx loaded");
+
 import "../index.css";
 import { Routes, Route } from "react-router-dom";
 
