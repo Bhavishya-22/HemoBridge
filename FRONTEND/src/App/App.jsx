@@ -3,7 +3,7 @@ import "../index.css";
 import { Routes, Route } from "react-router-dom";
 
 import Navbar from "./components/Navbar";
-
+import RegisterPage from "./pages/RegisterPage";
 import Home from "./pages/Home";
 import DonateBloodPage from "./pages/DonateBloodPage";
 import RequestBloodPage from "./pages/RequestBloodPage";
@@ -21,6 +21,7 @@ export default function App() {
         <Route path="/donate" element={<DonateBloodPage />} />
         <Route path="/faq" element={<FAQPage />} />
         <Route path="/profile" element={<ProfilePage />} />
+        <Route path="/register" element={<RegisterPage />} />
       </Routes>
     </>
   );
