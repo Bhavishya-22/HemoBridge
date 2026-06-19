@@ -27,7 +27,7 @@ exports.userRegister = asyncHandler(async (req, res) => {
     //send a success response like this which is in the code , this is the payload to the frontend(which is collected via req.body)
     //console.log(req.body)
     const { username, fullName, email, password} = req.body;
-    if ( !email && !username) {
+    if ( !email || !username || !fullName || !password) {
         return res.status(400).json({ message: "All fields are required" });
     }
     const existingUser = await User.findOne({ email });
@@ -42,7 +42,24 @@ exports.userRegister = asyncHandler(async (req, res) => {
         password, 
     });
 
-    res.status(201).json({
+    const { accessToken, refreshToken } =
+    await generateAccessandRefreshTokens(newUser._id);
+
+    res
+  .cookie("accessToken", accessToken, {
+    httpOnly: true,
+    secure: false,
+    sameSite: "strict",
+    maxAge: 60 * 1000,
+  })
+  .cookie("refreshToken", refreshToken, {
+    httpOnly: true,
+    secure: false,
+    sameSite: "strict",
+    maxAge: 24 * 60 * 60 * 1000,
+  })
+  .status(201)
+  .json({
         message: "User registered successfully",
         user: {
             id: newUser._id,
@@ -56,18 +73,20 @@ exports.userRegister = asyncHandler(async (req, res) => {
 
 exports.userLogin = asyncHandler(async (req, res) => {
     // Collect info from req.body (accepting either email OR username via 'identifier')
-    const { identifier, password } = req.body;
-    if (!identifier || !password) {
+    const {email, username, password} = req.body;
+
+    if ((!email && !username) || !password) {
         return res.status(400).json({
-            message: "Username/Email and password are required"
+            success:false,
+            message:"Email or Username and Password are required"
         });
     }
     // Search for a user where either the email OR the username matches the identifier
     const isExistingUser = await User.findOne({
-        $or: [
-            { email: identifier.toLowerCase() }, // Good practice to normalize case
-            { username: identifier }
-        ]
+       $or:[
+        {email},
+        {username}
+    ]
     });
 
     if (!isExistingUser) {
@@ -91,7 +110,7 @@ exports.userLogin = asyncHandler(async (req, res) => {
         httpOnly: true,
         secure: false,
         sameSite: "strict",
-        maxAge: 60 * 1000 // 1 minute
+        maxAge: 15 *60 * 1000 // 1 minute
     })
     .cookie("refreshToken", refreshToken, {
         httpOnly: true,
@@ -113,7 +132,7 @@ exports.userLogin = asyncHandler(async (req, res) => {
 
 exports.checkProfileCompletion =asyncHandler(async (req, res) => {
 //usefull for frontend
-    const user = await User.findById(req.userFromMiddleware.id);
+    const user = await User.findById(req.user.id);
 
      res.status(200).json({
         profileCompleted:
@@ -128,7 +147,7 @@ exports.checkProfileCompletion =asyncHandler(async (req, res) => {
 exports.userLogout = asyncHandler(async (req, res) => {
 
     await User.findByIdAndUpdate(
-        req.userFromMiddleware.id,
+        req.user.id,
         {$unset: {refreshToken: 1}},
         {new:true}
     );
@@ -149,10 +168,10 @@ exports.userLogout = asyncHandler(async (req, res) => {
         .json({
             message: "Logout successful",
             user:{
-            id:req.userFromMiddleware.id,
-            email:req.userFromMiddleware.email,
-            fullName:req.userFromMiddleware.fullName,
-            username:req.userFromMiddleware.username
+            id:req.user.id,
+            email:req.user.email,
+            fullName:req.user.fullName,
+            username:req.user.username
         }
         });
 });
@@ -192,7 +211,7 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
 
 exports.userUpdateProfile =asyncHandler(async (req, res) => {
     const {phoneNumber,bloodGroup,age,weight,diseases,location,role} = req.body;
-    const updatedUser =await User.findByIdAndUpdate(req.userFromMiddleware.id,
+    const updatedUser =await User.findByIdAndUpdate(req.user.id,
             {
                 phoneNumber,bloodGroup,age,weight,diseases,location,role,profileCompleted: true
             },
@@ -212,7 +231,7 @@ exports.userUpdateProfile =asyncHandler(async (req, res) => {
 
 exports.userProfileDetails =asyncHandler(async (req, res) => {
 
-    const user = await User.findById(req.userFromMiddleware.id).select("-password -refreshToken");
+    const user = await User.findById(req.user.id).select("-password -refreshToken");
 
     if (!user) {
         return res.status(404).json({message: "User not found"});

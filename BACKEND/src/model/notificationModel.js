@@ -14,6 +14,8 @@ const notificationSchema = new mongoose.Schema(
       enum: [
         "blood_request",
         "donation_update",
+        "request_accepted",
+        "donation_verified",
       ],
     },
 
@@ -38,7 +40,3 @@ module.exports = mongoose.model(
 );
 
 
-notificationSchema.methods.markAsRead = async function () {
-  this.status = "read";
-  return await this.save();
-};

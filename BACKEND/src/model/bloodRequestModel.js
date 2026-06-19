@@ -45,9 +45,13 @@ module.exports = mongoose.model(
 );
 
 bloodRequestSchema.pre("save", function (next) {
-  // Prevent users from accepting their own blood request
-  if (this.requestedBy.equals(this.acceptedBy)) {
-    return next(new Error("You cannot accept your own blood request."));
+  if (
+    this.acceptedBy &&
+    this.requestedBy.equals(this.acceptedBy)
+  ) {
+    return next(
+      new Error("You cannot accept your own blood request.")
+    );
   }
   next();
 });

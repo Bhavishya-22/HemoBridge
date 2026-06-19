@@ -2,7 +2,7 @@ const asyncHandler = require('express-async-handler')
 const User=require('../model/userModel')
 const jwt=require('jsonwebtoken')
 
-//this is created for the purpose of not having the user data while loggingout so if we need data whithout iput fields not only for logout the data contains the payload sent via generateAccessToken() methodwe use req.userFromMiddleware 
+//this is created for the purpose of not having the user data while loggingout so if we need data whithout iput fields not only for logout the data contains the payload sent via generateAccessToken() methodwe use req.user 
 
 const verifyTokens=asyncHandler(async(req,res,next)=>{
     // console.log("entered to the middleware")
@@ -16,7 +16,7 @@ const verifyTokens=asyncHandler(async(req,res,next)=>{
         if(!decodedUser){
              return res.status(404).json({message:"no user found"});
          }
-        req.userFromMiddleware=decodedUser;//sending this as payload 
+        req.user=decodedUser;//sending this as payload 
         next();
     } catch (error) {
         console.error(error)
