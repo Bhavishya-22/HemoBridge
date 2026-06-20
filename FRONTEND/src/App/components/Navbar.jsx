@@ -25,12 +25,10 @@ export default function Navbar() {
         ))}
       </div>
       <div className="nav-actions">
-  <button className="btn-ghost">Login</button>
-
-  <Link to="/register">
-    <button className="btn-primary">Register</button>
-  </Link>
-</div>
+        <Link to="/login">
+          <button className="btn-ghost">Login</button>
+        </Link>
+      </div>
     </nav>
   );
 }
