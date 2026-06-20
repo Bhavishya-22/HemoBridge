@@ -1,54 +1,97 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "../styles/profile.css";
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
+const ROLES = [
+  { value: "donor", label: "Donor", icon: "💉" },
+  { value: "receiver", label: "Receiver", icon: "🏥" },
+  { value: "hospital", label: "Hospital", icon: "🏢" },
+];
+
+const EMPTY_FORM = {
+  phoneNumber: "",
+  bloodGroup: "",
+  age: "",
+  weight: "",
+  role: "donor",
+  city: "",
+  state: "",
+  diseases: "",
+};
 
 export default function ProfilePage() {
   const navigate = useNavigate();
 
-  const [form, setForm] = useState({
-    phoneNumber: "",
-    bloodGroup: "",
-    age: "",
-    weight: "",
-    role: "donor",
-    city: "",
-    state: "",
-    diseases: "",
-  });
-
+  const [form, setForm] = useState(EMPTY_FORM);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [initializing, setInitializing] = useState(true);
 
   const handleChange = (e) =>
-    setForm({ ...form, [e.target.name]: e.target.value });
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+
+  useEffect(() => {
+    const controller = new AbortController();
+
+    const fetchProfile = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/user/profile`, {
+          method: "GET",
+          credentials: "include",
+          signal: controller.signal,
+        });
+        const data = await res.json();
+
+        if (res.ok && data.user) {
+          setForm({
+            phoneNumber: data.user.phoneNumber || "",
+            bloodGroup: data.user.bloodGroup || "",
+            age: data.user.age ?? "",
+            weight: data.user.weight ?? "",
+            role: data.user.role || "donor",
+            city: data.user.location?.city || "",
+            state: data.user.location?.state || "",
+            diseases: data.user.diseases?.join(", ") || "",
+          });
+        }
+      } catch (err) {
+        if (err.name !== "AbortError") {
+          console.error("Error fetching profile:", err);
+        }
+      } finally {
+        setInitializing(false);
+      }
+    };
+
+    fetchProfile();
+    return () => controller.abort();
+  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!form.phoneNumber || !form.bloodGroup || !form.age || !form.weight || !form.city || !form.state) {
+    const { phoneNumber, bloodGroup, age, weight, city, state } = form;
+    if (!phoneNumber || !bloodGroup || !age || !weight || !city || !state) {
       setError("Please fill in all required fields.");
       return;
     }
 
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:5000/user/update-profile", {
+      const res = await fetch(`${API_BASE}/user/update-profile`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          phoneNumber: form.phoneNumber,
-          bloodGroup: form.bloodGroup,
-          age: Number(form.age),
-          weight: Number(form.weight),
+          phoneNumber,
+          bloodGroup,
+          age: Number(age),
+          weight: Number(weight),
           role: form.role,
-          location: {
-            city: form.city,
-            state: form.state,
-          },
+          location: { city, state },
           diseases: form.diseases
             ? form.diseases.split(",").map((d) => d.trim()).filter(Boolean)
             : [],
@@ -58,15 +101,25 @@ export default function ProfilePage() {
       const data = await res.json();
       if (!res.ok) {
         setError(data.message || "Failed to save profile. Please try again.");
-      } else {
-        navigate("/home");
+        return;
       }
+      navigate("/home");
     } catch {
       setError("Unable to connect to server. Please try again later.");
     } finally {
       setLoading(false);
     }
   };
+
+  if (initializing) {
+    return (
+      <div className="profile-page">
+        <div className="profile-card profile-loading">
+          <span className="profile-spinner"></span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="profile-page">
@@ -94,27 +147,27 @@ export default function ProfilePage() {
           <div className="step">3 Done</div>
         </div>
 
-        {error && <div className="profile-error">{error}</div>}
+        {error && (
+          <div className="profile-error" role="alert">
+            {error}
+          </div>
+        )}
 
         <form className="profile-form" onSubmit={handleSubmit} noValidate>
-
-          {/* Role selector — prominent, at the top */}
+          {/* Role selector */}
           <div className="field-group full">
             <label className="field-label">I am a</label>
             <div className="role-selector">
-              {["donor", "receiver", "hospital"].map((r) => (
+              {ROLES.map(({ value, label, icon }) => (
                 <button
-                  key={r}
+                  key={value}
                   type="button"
-                  className={`role-btn ${form.role === r ? "active" : ""}`}
-                  onClick={() => setForm({ ...form, role: r })}
+                  className={`role-btn ${form.role === value ? "active" : ""}`}
+                  onClick={() => setForm((prev) => ({ ...prev, role: value }))}
+                  aria-pressed={form.role === value}
                 >
-                  <span className="role-icon">
-                    {r === "donor" ? "💉" : r === "receiver" ? "🏥" : "🏢"}
-                  </span>
-                  <span className="role-label">
-                    {r.charAt(0).toUpperCase() + r.slice(1)}
-                  </span>
+                  <span className="role-icon">{icon}</span>
+                  <span className="role-label">{label}</span>
                 </button>
               ))}
             </div>

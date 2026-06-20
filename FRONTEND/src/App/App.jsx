@@ -18,6 +18,7 @@ export default function App() {
 
       <Routes>
         <Route path="/" element={<Home />} />
+        <Route path="/home" element={<Home />} />
         <Route path="/request" element={<RequestBloodPage />} />
         <Route path="/donate" element={<DonateBloodPage />} />
         <Route path="/faq" element={<FAQPage />} />
