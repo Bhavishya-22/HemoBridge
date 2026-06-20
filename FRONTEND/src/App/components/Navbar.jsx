@@ -1,8 +1,6 @@
-import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import "../styles/navbar.css";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const links = [
   { name: "Home", path: "/" },
@@ -14,35 +12,11 @@ const links = [
 
 export default function Navbar() {
   const navigate = useNavigate();
-  const [isLoggedIn, setIsLoggedIn] = useState(null); // null = unknown/checking
-
-  useEffect(() => {
-    const controller = new AbortController();
-
-    fetch(`${API_BASE}/user/profile`, {
-      credentials: "include",
-      signal: controller.signal,
-    })
-      .then((res) => setIsLoggedIn(res.ok))
-      .catch((err) => {
-        if (err.name !== "AbortError") setIsLoggedIn(false);
-      });
-
-    return () => controller.abort();
-  }, []);
+  const { isLoggedIn, checkingAuth, logout } = useAuth();
 
   const handleLogout = async () => {
-    try {
-      await fetch(`${API_BASE}/auth/logout`, {
-        method: "POST",
-        credentials: "include",
-      });
-    } catch (err) {
-      console.error("Logout request failed:", err);
-    } finally {
-      setIsLoggedIn(false);
-      navigate("/login");
-    }
+    await logout();
+    navigate("/login");
   };
 
   return (
@@ -63,12 +37,12 @@ export default function Navbar() {
       </div>
 
       <div className="nav-actions">
-        {isLoggedIn === false && (
+        {!checkingAuth && !isLoggedIn && (
           <Link to="/login">
             <button className="btn-ghost">Login</button>
           </Link>
         )}
-        {isLoggedIn === true && (
+        {!checkingAuth && isLoggedIn && (
           <button className="btn-ghost" onClick={handleLogout}>
             Logout
           </button>

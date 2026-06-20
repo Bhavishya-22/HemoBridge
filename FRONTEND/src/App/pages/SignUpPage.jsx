@@ -62,7 +62,7 @@ export default function SignupPage() {
               name="fullName"
               type="text"
               className="field-input"
-              placeholder="Thanmayee Pendli"
+              placeholder="YOUR FULL NAME"
               value={form.fullName}
               onChange={handleChange}
               required
@@ -77,7 +77,7 @@ export default function SignupPage() {
               name="username"
               type="text"
               className="field-input"
-              placeholder="thanmayee123"
+              placeholder="username"
               value={form.username}
               onChange={handleChange}
               required
