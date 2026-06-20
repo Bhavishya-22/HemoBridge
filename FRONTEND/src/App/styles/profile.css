@@ -1,0 +1,257 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&family=Inter:wght@400;500&display=swap');
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --crimson: #B91C1C;
+  --crimson-dark: #7F1D1D;
+  --rose: #F43F5E;
+  --rose-light: #FFE4E8;
+  --slate: #1E293B;
+  --slate-mid: #334155;
+  --muted: #64748B;
+  --border: #F1C5C5;
+  --surface: #FFF7F7;
+  --white: #FFFFFF;
+  --font-display: 'Sora', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 20px;
+}
+
+body {
+  font-family: var(--font-body);
+  background: var(--surface);
+  color: var(--slate);
+  min-height: 100vh;
+}
+
+/* ── PAGE ── */
+.profile-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 3rem 1.25rem 4rem;
+  background: linear-gradient(135deg, #fff7f7 0%, #fff 60%, #fef2f2 100%);
+}
+
+/* ── CARD ── */
+.profile-card {
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2.5rem 2.75rem;
+  width: 100%;
+  max-width: 680px;
+  box-shadow: 0 4px 32px rgba(185, 28, 28, 0.08);
+}
+
+/* ── BRAND ── */
+.profile-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 2rem;
+}
+.profile-brand-icon {
+  width: 32px; height: 32px;
+  background: var(--crimson);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 16px;
+}
+.profile-brand-name {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--slate);
+}
+.profile-brand-name span { color: var(--crimson); }
+
+/* ── HEADER ── */
+.profile-header { margin-bottom: 1.5rem; }
+.profile-title {
+  font-family: var(--font-display);
+  font-size: 1.65rem;
+  font-weight: 700;
+  color: var(--slate);
+  margin-bottom: 0.35rem;
+}
+.profile-sub { font-size: 0.875rem; color: var(--muted); line-height: 1.6; }
+
+/* ── STEPS ── */
+.profile-steps {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 2rem;
+}
+.step {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.step.done { color: #16a34a; }
+.step.active {
+  color: var(--crimson);
+  font-weight: 600;
+}
+.step-line {
+  flex: 1;
+  height: 1.5px;
+  background: var(--border);
+  margin: 0 0.6rem;
+}
+
+/* ── ERROR ── */
+.profile-error {
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: var(--radius-sm);
+  color: var(--crimson);
+  font-size: 0.875rem;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1.5rem;
+}
+
+/* ── FORM ── */
+.profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.field-group.full { grid-column: 1 / -1; }
+
+.field-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--slate);
+}
+.required { color: var(--crimson); margin-left: 1px; }
+.field-optional { color: var(--muted); font-weight: 400; }
+
+.field-input {
+  height: 44px;
+  padding: 0 0.9rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--white);
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--slate);
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.field-input::placeholder { color: #cbd5e1; }
+.field-input:hover { border-color: #f9a8b0; }
+.field-input:focus {
+  border-color: var(--crimson);
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.1);
+}
+
+select.field-input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748B' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  padding-right: 2.25rem;
+  cursor: pointer;
+}
+
+.field-hint {
+  font-size: 0.77rem;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+/* ── ROLE SELECTOR ── */
+.role-selector {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.75rem;
+}
+.role-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.9rem 0.75rem;
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--white);
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: var(--font-body);
+}
+.role-btn:hover { border-color: #f9a8b0; background: var(--rose-light); }
+.role-btn.active {
+  border-color: var(--crimson);
+  background: var(--rose-light);
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.1);
+}
+.role-icon { font-size: 1.5rem; }
+.role-label {
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--slate-mid);
+}
+.role-btn.active .role-label { color: var(--crimson); font-weight: 600; }
+
+/* ── SUBMIT ── */
+.profile-btn {
+  margin-top: 0.5rem;
+  height: 48px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: var(--crimson);
+  color: var(--white);
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 14px rgba(185, 28, 28, 0.3);
+}
+.profile-btn:hover:not(:disabled) {
+  background: var(--crimson-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(185, 28, 28, 0.38);
+}
+.profile-btn:active:not(:disabled) { transform: translateY(0); }
+.profile-btn:disabled { opacity: 0.65; cursor: not-allowed; }
+
+/* ── SPINNER ── */
+.profile-spinner {
+  width: 18px; height: 18px;
+  border: 2.5px solid rgba(255,255,255,0.35);
+  border-top-color: var(--white);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── RESPONSIVE ── */
+@media (max-width: 600px) {
+  .profile-card { padding: 1.75rem 1.25rem; }
+  .form-row { grid-template-columns: 1fr; }
+  .role-selector { grid-template-columns: repeat(3, 1fr); }
+}
