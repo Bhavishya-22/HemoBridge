@@ -52,7 +52,42 @@ const userSchema = new mongoose.Schema(
       },
     },
 
+    // Hospital specific fields
+    hospitalName: String,
+    registrationNumber: String,
+    hospitalAddress: String,
+    hospitalPhone: String,
+    
+    // Hospital verification status
+    hospitalVerified: {
+      type: Boolean,
+      default: false,
+    },
+    
+    hospitalVerificationStatus: {
+      type: String,
+      enum: ["pending", "verified", "rejected"],
+      default: "pending",
+    },
+    
+    hospitalVerificationNotes: String,
+    hospitalVerifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    hospitalVerifiedAt: Date,
+
     profileCompleted: {
+      type: Boolean,
+      default: false,
+    },
+    
+    isVerified: {
+      type: Boolean,
+      default: false,
+    },
+
+    isBlocked: {
       type: Boolean,
       default: false,
     },
@@ -64,18 +99,15 @@ const userSchema = new mongoose.Schema(
   }
 );
 
-// 🔑 Pre-save hook: hash password automatically
 userSchema.pre("save", async function (next) {
   if (!this.isModified("password")) return;
   this.password = await bcrypt.hash(this.password, 10);
 });
 
-// 🔑 Compare entered password with hashed password
 userSchema.methods.comparePassword = async function (enteredPassword) {
   return await bcrypt.compare(enteredPassword, this.password);
 };
 
-// 🔑 Generate Access Token
 userSchema.methods.generateAccessToken = function () {
   return jwt.sign(
     {
@@ -83,18 +115,19 @@ userSchema.methods.generateAccessToken = function () {
       email: this.email,
       username: this.username,
       fullName: this.fullName,
+      role: this.role,
+      hospitalVerified: this.hospitalVerified,
     },
     process.env.JWT_ACCESS_SECRET,
-    { expiresIn: "15m" } // short-lived
+    { expiresIn: "15m" }
   );
 };
 
-// 🔑 Generate Refresh Token
 userSchema.methods.generateRefreshToken = function () {
   return jwt.sign(
     { id: this._id },
     process.env.JWT_REFRESH_SECRET,
-    { expiresIn: "1d" } // long-lived
+    { expiresIn: "1d" }
   );
 };
 

@@ -11,14 +11,13 @@ require('dotenv').config({
 const connectDB = require('./src/utils/databaseUtil');//1
 const PORT = process.env.PORT || 3000;
 const userRouter = require('./src/routes/userRouter');
-const requestRouter = require("./src/routes/requestRouter");
-const donationRouter = require(  "./src/routes//donationRouter");
-const navRouter=require("./src/routes/notificationRouter")
-
+const requestRouter = require('./src/routes/requestRouter');
+const donationRouter = require('./src/routes/donationRouter');
+const hospitalRouter = require('./src/routes/hospitalRouter');
+const notificationRouter = require('./src/routes/notificationRouter');
 //code
 const rootDir = path.resolve();
 const app = express();
-
 
 //middlewares
 app.use(cors());
@@ -31,7 +30,8 @@ app.use(cookieParser());//this enables cookies any where in the code by req.cook
 app.use('/', userRouter);
 app.use("/", requestRouter);
 app.use("/",donationRouter)
-app.use("/",navRouter)
+app.use("/", hospitalRouter);
+app.use("/",notificationRouter)
 //mongodb connection and server start
 connectDB().then(() => {
     app.listen(PORT, () => {
