@@ -1,5 +1,6 @@
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import "../styles/navbar.css";
-import { Link } from "react-router-dom";
 
 const links = [
   { name: "Home", path: "/" },
@@ -9,28 +10,44 @@ const links = [
   { name: "Profile", path: "/profile" },
 ];
 
-
 export default function Navbar() {
+  const navigate = useNavigate();
+  const { isLoggedIn, checkingAuth, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
+
   return (
     <nav className="nav">
-      <a href="#" className="nav-logo">
+      <Link to="/" className="nav-logo">
         <div className="nav-logo-icon">🩸</div>
-        <span className="nav-logo-text">Blood<span>Bank</span></span>
-      </a>
+        <span className="nav-logo-text">
+          Blood<span>Bank</span>
+        </span>
+      </Link>
+
       <div className="nav-links">
-        {links.map(link => (
+        {links.map((link) => (
           <Link key={link.path} to={link.path}>
             {link.name}
           </Link>
         ))}
       </div>
-      <div className="nav-actions">
-  <button className="btn-ghost">Login</button>
 
-  <Link to="/register">
-    <button className="btn-primary">Register</button>
-  </Link>
-</div>
+      <div className="nav-actions">
+        {!checkingAuth && !isLoggedIn && (
+          <Link to="/login">
+            <button className="btn-ghost">Login</button>
+          </Link>
+        )}
+        {!checkingAuth && isLoggedIn && (
+          <button className="btn-ghost" onClick={handleLogout}>
+            Logout
+          </button>
+        )}
+      </div>
     </nav>
   );
 }
