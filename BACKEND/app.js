@@ -1,4 +1,3 @@
-
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -10,53 +9,35 @@ const connectDB = require('./src/utils/databaseUtil');
 const userRouter = require('./src/routes/userRouter');
 const requestRouter = require('./src/routes/requestRouter');
 const donationRouter = require('./src/routes/donationRouter');
-<<<<<<< HEAD
 const hospitalRouter = require('./src/routes/hospitalRouter');
-const notificationRouter = require('./src/routes/notificationRouter');
-//code
-const rootDir = path.resolve();
-const app = express();
-
-//middlewares
-app.use(cors());
-=======
 const notificationRouter = require('./src/routes/notificationRouter');
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+
 const rootDir = path.resolve();
 const app = express();
 
 // middlewares
 app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
->>>>>>> 4ee9ef1180890910f5594e047e3acb5c73adf150
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(rootDir, 'public')));
-app.use(cookieParser()); // enables req.cookies anywhere downstream
+app.use(cookieParser());
 
 // routes
 app.use('/', userRouter);
-<<<<<<< HEAD
-app.use("/", requestRouter);
-app.use("/",donationRouter)
-app.use("/", hospitalRouter);
-app.use("/",notificationRouter)
-//mongodb connection and server start
-connectDB().then(() => {
-    app.listen(PORT, () => {
-        console.log(`🚀 Server is running on http://localhost:${PORT}`);
-=======
 app.use('/', requestRouter);
 app.use('/', donationRouter);
+app.use('/', hospitalRouter);
 app.use('/', notificationRouter);
 
-// 404 handler (no route matched)
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// global error handler (catches errors passed via next(err))
+// global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(err.status || 500).json({
@@ -70,7 +51,6 @@ connectDB()
   .then(() => {
     server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
->>>>>>> 4ee9ef1180890910f5594e047e3acb5c73adf150
     });
   })
   .catch((error) => {
