@@ -41,28 +41,29 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
 
     await request.save();
 
-const donor = await User.findOne({
+const donors = await User.find({
     role: "donor",
     bloodGroup: request.bloodGroup,
     availabilityStatus: "available",
 });
 
-if (donor) {
-    request.selectedDonor = donor._id;
+if (donors.length > 0) {
+
     request.status = "waiting_for_donor";
 
-    request.notifiedDonors.push(donor._id);
-    donor.availabilityStatus = "busy";
+    for (const donor of donors) {
 
-    await donor.save();
+        request.notifiedDonors.push(donor._id);
+
+        await Notification.create({
+            recipientId: donor._id,
+            relatedRequest: request._id,
+            type: "blood_request",
+            message: "A blood donation request requires your attention. Please accept or reject.",
+        });
+    }
+
     await request.save();
-
-    await Notification.create({
-        recipientId: donor._id,
-        relatedRequest: request._id,
-        type: "blood_request",
-        message: `A blood donation request requires your attention. Please accept or reject.`,
-    });
 }
 
 await Notification.create({

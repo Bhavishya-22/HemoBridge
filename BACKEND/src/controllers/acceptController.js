@@ -24,10 +24,23 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
             message: "Blood request not found",
         });
     }
-    if (!request.selectedDonor ||request.selectedDonor.toString() !== donorId) {
+    if (request.status === "donor_accepted") {
+    return res.status(400).json({
+        success: false,
+        message: "Request already accepted by a donor",
+    });
+    }
+    if (
+        !request.notifiedDonors ||
+        !request.notifiedDonors.some(
+            donor =>
+                donor._id &&
+                donor._id.toString() === donorId.toString()
+        )
+    ) {
         return res.status(403).json({
             success: false,
-            message: "You are not assigned to this request",
+            message: "You are not notified for this request",
         });
     }
     if (request.status === "completed" ||request.status === "cancelled") {
@@ -37,15 +50,17 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
         });
     }
 
+    request.selectedDonor = donorId;
     request.status = "donor_accepted";
+
     await request.save();
 
     const donation = await DonationRecord.create({
         donorId,
         receiverId: request.requestedBy,
         requestId: request._id,
-        hospitalId: request.assignedHospital,
-        status: "matched",
+        hospitalId: request.hospitalApprovedBy,
+        status: "donor_accepted",
         verificationStatus: "pending",
     });
 
@@ -53,7 +68,7 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
 
     await Notification.create({
         recipientId: request.requestedBy,
-        type: "donor_selected",
+        type: "donor_accepted",
         relatedRequest: request._id,
         relatedDonation: donation._id,
         message: `${donor.fullName} accepted your blood request.`,
@@ -62,7 +77,7 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
     if (request.assignedHospital) {
         await Notification.create({
             recipientId: request.assignedHospital,
-            type: "donor_selected",
+            type: "donor_accepted",
             relatedRequest: request._id,
             relatedDonation: donation._id,
             message: `${donor.fullName} accepted the blood donation request.`,
@@ -99,14 +114,15 @@ exports.rejectRequest = asyncHandler(async (req, res) => {
             message: "Blood request not found",
         });
     }
-
     if (
-        !request.selectedDonor ||
-        request.selectedDonor.toString() !== donorId
+        !request.notifiedDonors ||
+        !request.notifiedDonors.some(
+            id => id.toString() === donorId.toString()
+        )
     ) {
         return res.status(403).json({
             success: false,
-            message: "You are not assigned to this request",
+            message: "You are not notified for this request",
         });
     }
 
