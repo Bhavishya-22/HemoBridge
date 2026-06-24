@@ -24,50 +24,38 @@ const bloodRequestSchema = new mongoose.Schema(
       enum: ["low", "medium", "high", "critical"],
       default: "medium",
     },
-    status: {
-      type: String,
-      enum: [
-        "pending",        // Waiting for donors to accept
-        "accepted",       // Donors accepted, waiting for hospital selection
-        "matched",        // Hospital selected donor
-        "completed",      // Donation completed and verified
-        "cancelled",
-        "expired",
-        "donor_accepted",
-        "donor_rejected",
-        "donor_selected",
-      ],
-      default: "pending",
-    },
-    acceptedDonors: [
-      {
-        donor: {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
-        },
-        status: {
-          type: String,
-          enum: ["pending", "selected", "rejected"],
-          default: "pending",
-        },
-        acceptedAt: {
-          type: Date,
-          default: Date.now,
-        },
-        selectedAt: Date,
-        rejectedAt: Date,
-        rejectionReason: String,
-      },
-    ],
-    acceptedCount: {
-      type: Number,
-      default: 0,
-    },
+status: {
+  type: String,
+  enum: [
+    "pending_hospital_approval",
+    "hospital_approved",
+    "waiting_for_donor",
+    "donor_accepted",
+    "blood_testing",
+    "completed",
+    "rejected",
+    "cancelled",
+  ],
+  default: "pending_hospital_approval",
+},
+
     selectedDonor: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
     },
+    notifiedDonors: [
+      {
+        donor: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        notifiedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
     assignedHospital: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -76,11 +64,43 @@ const bloodRequestSchema = new mongoose.Schema(
     matchedAt: {
       type: Date,
     },
-    location: String,
+    location: {
+      city: String,
+      state: String,
+      coordinates: {
+        lat: Number,
+        lng: Number,
+      },
+    },
     hospitalName: String,
     description: String,
     completedAt: Date,
     hospitalVerifiedAt: Date,
+    hospitalApproved: {
+        type: Boolean,
+        default: false,
+      },
+
+      hospitalApprovedBy: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+
+      hospitalApprovedAt: Date,
+
+
+      bloodTestResult: {
+        type: String,
+        enum: ["pending", "accepted", "rejected"],
+        default: "pending",
+      },
+
+      receiverConfirmed: {
+        type: Boolean,
+        default: false,
+      },
+
+      receiverConfirmedAt: Date,
   },
   {
     timestamps: true,

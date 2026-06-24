@@ -1,10 +1,9 @@
+//userController.js
 const asyncHandler = require('express-async-handler');
 const bcrypt = require('bcryptjs'); 
 const User = require('../model/userModel');
 const jwt = require("jsonwebtoken");
 
-// Admin emails
-const ADMIN_EMAILS = ["test1@com", "test2@com", "test3@com", "test4@com"];
 
 // Declared separately because it’s reusable across register, login, and refresh flows.
 // Generates access and refresh tokens, saves refresh token in DB without requiring password validation again.
@@ -21,25 +20,7 @@ const generateAccessandRefreshTokens = asyncHandler(async(userId) => {
     }
 });
 
-//checks whether the entered mail is adminMail or not
-exports.checkAdminEmail = asyncHandler(async (req, res) => {
-    const { email } = req.body;
 
-    if (!email) {
-        return res.status(400).json({
-            success: false,
-            message: "Email is required"
-        });
-    }
-
-    const isAdminEmail = ADMIN_EMAILS.includes(email.toLowerCase());
-
-    return res.status(200).json({
-        success: true,
-        isAdmin: isAdminEmail,
-        message: isAdminEmail ? "Admin role available" : "Admin role not available for this email"
-    });
-});
 
 // Collects user data from request body.
 // Validates required fields, checks if user already exists.
@@ -57,7 +38,7 @@ exports.userRegister = asyncHandler(async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ["donor", "receiver", "hospital", "admin"];
+    const validRoles = ["donor", "receiver", "hospital"];
     if (!validRoles.includes(role)) {
         return res.status(400).json({ 
             success: false,
@@ -65,16 +46,6 @@ exports.userRegister = asyncHandler(async (req, res) => {
         });
     }
 
-    // Check if admin role is being selected
-    if (role === "admin") {
-        const isAdminEmail = ADMIN_EMAILS.includes(email.toLowerCase());
-        if (!isAdminEmail) {
-            return res.status(403).json({ 
-                success: false,
-                message: "Admin role not available for this email" 
-            });
-        }
-    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ 
@@ -140,12 +111,12 @@ exports.userLogin = asyncHandler(async (req, res) => {
         });
     }
 
-    const isExistingUser = await User.findOne({
-        $or: [
-            { email },
-            { username }
-        ]
-    });
+const isExistingUser = await User.findOne({
+    $or: [
+        { email },
+        { username }
+    ]
+}).select("+password +refreshToken");
 
     if (!isExistingUser) {
         return res.status(404).json({

@@ -5,11 +5,11 @@ const donorOnly = async (req,res,next) => {
   try {
     const user = await User.findById(req.user.id);
 
-    if (user.role !== "donor" &&user.role !== "hospital") {
+    if (user.role !== "donor") {
       return res.status(403).json({
         success: false,
         message:
-          "Only donors can accept requests",
+          "Only donors can access this route",
       });
     }
     next();

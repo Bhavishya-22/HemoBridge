@@ -6,19 +6,41 @@ const hospitalOnly = require("../middlewares/hospitalOnlyMiddleware");
 
 const donationRouter = express.Router();
 
-// Get donation status (common)
-donationRouter.get("/donations/:donationId",authMiddleware,donationController.getDonationStatus);
+// Common
+donationRouter.get(
+  "/donations/:donationId",
+  authMiddleware,
+  donationController.getDonationStatus
+);
 
-// Donor routes
-donationRouter.get("/donor/donations",authMiddleware,donorOnly,donationController.getDonorDonations);
-donationRouter.post("/donations/:donationId/initiate",authMiddleware,donorOnly,donationController.initiateDonation);
-donationRouter.post("/donations/:donationId/complete",authMiddleware,donorOnly,donationController.completeDonation);
+// Donor
+donationRouter.get(
+  "/donor/donations",
+  authMiddleware,
+  donorOnly,
+  donationController.getDonorDonations
+);
 
-// Receiver routes
-donationRouter.get("/receiver/donations",authMiddleware,donationController.getReceiverDonations);
+// Receiver
+donationRouter.get(
+  "/receiver/donations",
+  authMiddleware,
+  donationController.getReceiverDonations
+);
 
-// Hospital routes
-donationRouter.get("/hospital/donations",authMiddleware,hospitalOnly,donationController.getHospitalDonations);
-donationRouter.post("/donations/:donationId/verify",authMiddleware,hospitalOnly,donationController.verifyDonation);
+// Hospital
+donationRouter.get(
+  "/hospital/donations",
+  authMiddleware,
+  hospitalOnly,
+  donationController.getHospitalDonations
+);
+
+donationRouter.post(
+  "/donations/:donationId/verify",
+  authMiddleware,
+  hospitalOnly,
+  donationController.verifyDonation
+);
 
 module.exports = donationRouter;

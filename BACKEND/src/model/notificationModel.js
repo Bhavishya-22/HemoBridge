@@ -16,16 +16,19 @@ const notificationSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: [
-        "blood_request",           // New blood request created
-        "donors_accepted",         // Multiple donors accepted - notify hospital
-        "donation_initiated",      // Donor initiated donation
-        "donation_completed",      // Donation physically completed
-        "donor_selected",          // Hospital selected donor
-        "donor_rejected",          // Hospital rejected donor
-        "donation_verified",       // Hospital verified successful
-        "donation_rejected",       // Hospital rejected donation
-        "request_completed",       // Receiver notification - donation success
-      ],
+      "hospital_approval_required",
+      "hospital_approved",
+      "hospital_rejected",
+      "donor_request",
+      "donor_accepted",
+      "donor_rejected",
+      "donor_on_hold",
+      "next_donor_selected",
+      "blood_test_accepted",
+      "blood_test_rejected",
+      "request_completed",
+      "general",
+    ],
       required: true,
     },
 
@@ -48,6 +51,11 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       enum: ["sent", "delivered", "read"],
       default: "sent",
+    },
+    priority: {
+    type: String,
+    enum: ["low", "normal", "high", "critical"],
+    default: "normal",
     },
   },
   {

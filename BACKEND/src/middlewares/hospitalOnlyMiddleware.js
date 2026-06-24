@@ -1,3 +1,4 @@
+//hospitalOnlyMiddleware.js
 const User = require("../model/userModel");
 
 const hospitalOnly = async (req, res, next) => {

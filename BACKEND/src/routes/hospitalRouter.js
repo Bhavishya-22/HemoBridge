@@ -1,7 +1,10 @@
 const express = require("express");
 const hospitalVerificationController = require("../controllers/hospitalVerificationController");
+const hospitalVerifyBlood = require("../controllers/hospitalVerifyBlood");
+
 const authMiddleware = require("../middlewares/authMiddleware");
 const adminOnly = require("../middlewares/adminOnlyMiddleware");
+const hospitalOnly = require("../middlewares/hospitalOnlyMiddleware");
 
 const hospitalRouter = express.Router();
 
@@ -19,4 +22,23 @@ hospitalRouter.get("/hospitals/all",hospitalVerificationController.getAllHospita
 // Public route to get specific hospital details
 hospitalRouter.get("/hospitals/:hospitalId",hospitalVerificationController.getHospitalDetails);
 
+
+// Hospital approves blood request
+hospitalRouter.post(
+  "/hospital/approve-request/:requestId",
+  authMiddleware,
+  hospitalOnly,
+  hospitalVerifyBlood.approveBloodRequest
+);
+
+// Hospital rejects blood request
+hospitalRouter.post(
+  "/hospital/reject-request/:requestId",
+  authMiddleware,
+  hospitalOnly,
+  hospitalVerifyBlood.rejectBloodRequest
+);
+
+
 module.exports = hospitalRouter;
+

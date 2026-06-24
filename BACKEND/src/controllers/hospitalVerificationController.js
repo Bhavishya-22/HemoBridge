@@ -1,3 +1,4 @@
+//hospitalVerificationController.js
 const mongoose = require("mongoose");
 const User = require("../model/userModel");
 const Notification = require("../model/notificationModel");
@@ -146,7 +147,7 @@ exports.verifyHospital = asyncHandler(async (req, res) => {
         await Notification.create({
             recipientId: hospitalId,
             message: `Your hospital verification was rejected. Reason: ${rejectionNotes}. Please contact admin for more details.`,
-            type: "blood_request",
+            type: "general",
         });
 
         return res.status(200).json({

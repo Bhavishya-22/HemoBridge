@@ -25,13 +25,14 @@ const donationSchema = new mongoose.Schema(
     status: {
       type: String,
       enum: [
-        "matched",      // Hospital selected, waiting for donor action
-        "initiated",    // Donor started donation process
-        "completed",    // Physical donation completed
+        "allocated",
+        "donor_accepted",
+        "blood_testing",
+        "completed",
+        "rejected",
         "cancelled",
-        "failed",
       ],
-      default: "matched",
+      default: "allocated",
     },
     verificationStatus: {
       type: String,

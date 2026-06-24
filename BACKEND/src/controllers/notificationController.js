@@ -1,3 +1,4 @@
+//notificationController.js
 const Notification = require("../model/notificationModel");
 const asyncHandler = require("express-async-handler");
 
@@ -82,7 +83,7 @@ exports.deleteNotification = asyncHandler(async (req, res) => {
 exports.getUnreadCount = asyncHandler(async (req, res) => {
     const unreadCount = await Notification.countDocuments({
         recipientId: req.user.id,
-        status: "sent",
+        status: { $ne: "read" },
     });
 
     res.status(200).json({

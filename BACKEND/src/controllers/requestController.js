@@ -1,3 +1,4 @@
+//requestController.js
 const mongoose = require("mongoose");
 const DonationRecord = require("../model/donationRecordModel");
 const BloodRequest = require("../model/bloodRequestModel");
@@ -39,6 +40,7 @@ exports.createRequest = asyncHandler(async (req, res) => {
         location,
         hospitalName,
         description,
+        status: "pending_hospital_approval"
     });
 
     res.status(201).json({
@@ -55,7 +57,7 @@ exports.createRequest = asyncHandler(async (req, res) => {
 });
 
 exports.viewRequests = asyncHandler(async (req, res) => {
-    const requests = await BloodRequest.find({ status: "pending" })
+    const requests = await BloodRequest.find({ status: "pending_hospital_approval" })
         .populate("requestedBy", "fullName bloodGroup location phoneNumber")
         .sort({ emergencyLevel: -1, createdAt: -1 });
 
@@ -75,10 +77,6 @@ exports.myRequests = asyncHandler(async (req, res) => {
             "fullName email phoneNumber bloodGroup"
         )
         .populate(
-            "acceptedDonors.donor",
-            "fullName email phoneNumber bloodGroup location"
-        )
-        .populate(
             "assignedHospital",
             "fullName hospitalName hospitalPhone"
         )
@@ -91,72 +89,11 @@ exports.myRequests = asyncHandler(async (req, res) => {
     });
 });
 
-exports.viewAcceptedDonors = asyncHandler(async (req, res) => {
-    const { requestId } = req.params;
-    const receiverId = req.user.id;
-
-    if (!mongoose.Types.ObjectId.isValid(requestId)) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid request ID format",
-        });
-    }
-
-    const request = await BloodRequest.findById(requestId);
-
-    if (!request) {
-        return res.status(404).json({
-            success: false,
-            message: "Blood request not found",
-        });
-    }
-
-    // Only receiver can view
-    if (request.requestedBy.toString() !== receiverId) {
-        return res.status(403).json({
-            success: false,
-            message: "Only request creator can view accepted donors",
-        });
-    }
-
-    await request.populate({
-        path: "acceptedDonors.donor",
-        select: "fullName email phoneNumber bloodGroup location age weight",
-    });
-
-    return res.status(200).json({
-        success: true,
-        data: {
-            requestId: request._id,
-            bloodGroup: request.bloodGroup,
-            quantity: request.quantity,
-            emergencyLevel: request.emergencyLevel,
-            acceptedCount: request.acceptedCount,
-            selectedDonor: request.selectedDonor || null,
-            requestStatus: request.status,
-            acceptedDonors: request.acceptedDonors
-                .filter(d => d.status === "pending")
-                .map((d) => ({
-                    donorId: d.donor._id,
-                    donorName: d.donor.fullName,
-                    email: d.donor.email,
-                    phoneNumber: d.donor.phoneNumber,
-                    bloodGroup: d.donor.bloodGroup,
-                    location: d.donor.location,
-                    age: d.donor.age,
-                    weight: d.donor.weight,
-                    acceptedAt: d.acceptedAt,
-                })),
-        },
-    });
-});
-
 exports.getHospitalRequests = asyncHandler(async (req, res) => {
-    const hospitalId = req.user.id;
 
     // Get all pending and accepted requests
     const requests = await BloodRequest.find({
-        status: { $in: ["pending", "accepted"] }
+        status: { $in: ["pending_hospital_approval"] }
     })
         .populate("requestedBy", "fullName email phoneNumber location")
         .sort({ emergencyLevel: -1, createdAt: -1 });
@@ -180,11 +117,6 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
 
     const request = await BloodRequest.findById(requestId)
         .populate("requestedBy", "fullName email phoneNumber location age bloodGroup")
-        .populate({
-            path: "acceptedDonors.donor",
-            select: "fullName email phoneNumber bloodGroup location age weight diseases"
-        });
-
     if (!request) {
         return res.status(404).json({
             success: false,
@@ -201,14 +133,9 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
             quantity: request.quantity,
             emergencyLevel: request.emergencyLevel,
             status: request.status,
-            acceptedCount: request.acceptedCount,
-            acceptedDonors: request.acceptedDonors
-                .filter(d => d.status === "pending")
-                .map((d) => ({
-                    donorId: d.donor._id,
-                    donorDetails: d.donor,
-                    acceptedAt: d.acceptedAt,
-                })),
+            hospitalApproved: request.hospitalApproved,
+            selectedDonor: request.selectedDonor,
+            bloodTestResult: request.bloodTestResult,
             createdAt: request.createdAt,
         },
     });

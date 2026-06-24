@@ -1,3 +1,4 @@
+//donationController.js
 const mongoose = require("mongoose");
 const DonationRecord = require("../model/donationRecordModel");
 const BloodRequest = require("../model/bloodRequestModel");
@@ -99,132 +100,6 @@ exports.getHospitalDonations = asyncHandler(async (req, res) => {
     });
 });
 
-exports.initiateDonation = asyncHandler(async (req, res) => {
-    const { donationId } = req.params;
-    const { donorNotes } = req.body;
-    const donorId = req.user.id;
-
-    if (!mongoose.Types.ObjectId.isValid(donationId)) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid donation ID format",
-        });
-    }
-
-    const donation = await DonationRecord.findById(donationId);
-
-    if (!donation) {
-        return res.status(404).json({
-            success: false,
-            message: "Donation record not found",
-        });
-    }
-
-    // Verify donor authorization
-    if (donation.donorId.toString() !== donorId) {
-        return res.status(403).json({
-            success: false,
-            message: "Only assigned donor can initiate donation",
-        });
-    }
-
-    // Check status
-    if (donation.status !== "matched") {
-        return res.status(400).json({
-            success: false,
-            message: "Donation cannot be initiated in current status",
-        });
-    }
-
-    // Update donation
-    donation.status = "initiated";
-    donation.donationDate = new Date();
-    donation.donorNotes = donorNotes || "";
-    await donation.save();
-
-    // Get user details
-    const donor = await User.findById(donorId).select("fullName");
-
-    // Notify hospital
-    await Notification.create({
-        recipientId: donation.hospitalId,
-        message: `${donor.fullName} has initiated the donation process.`,
-        type: "donation_initiated",
-        relatedDonation: donationId,
-    });
-
-    return res.status(200).json({
-        success: true,
-        message: "Donation initiated successfully",
-        data: {
-            donationId: donation._id,
-            status: "initiated",
-            donationDate: donation.donationDate,
-        },
-    });
-});
-
-exports.completeDonation = asyncHandler(async (req, res) => {
-    const { donationId } = req.params;
-    const donorId = req.user.id;
-
-    if (!mongoose.Types.ObjectId.isValid(donationId)) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid donation ID format",
-        });
-    }
-
-    const donation = await DonationRecord.findById(donationId);
-
-    if (!donation) {
-        return res.status(404).json({
-            success: false,
-            message: "Donation record not found",
-        });
-    }
-
-    // Verify donor
-    if (donation.donorId.toString() !== donorId) {
-        return res.status(403).json({
-            success: false,
-            message: "Only assigned donor can complete donation",
-        });
-    }
-
-    if (donation.status !== "initiated") {
-        return res.status(400).json({
-            success: false,
-            message: "Donation can only be completed from initiated status",
-        });
-    }
-
-    // Update donation
-    donation.status = "completed";
-    donation.completedAt = new Date();
-    await donation.save();
-
-    // Get user details
-    const donor = await User.findById(donorId).select("fullName");
-
-    // Notify hospital for final verification
-    await Notification.create({
-        recipientId: donation.hospitalId,
-        message: `${donor.fullName} has completed the donation. Please verify and confirm.`,
-        type: "donation_completed",
-        relatedDonation: donationId,
-    });
-
-    return res.status(200).json({
-        success: true,
-        message: "Donation marked as completed. Awaiting hospital verification.",
-        data: {
-            donationId: donation._id,
-            status: "completed",
-            completedAt: donation.completedAt,
-        },
-    });
-});
 
 exports.verifyDonation = asyncHandler(async (req, res) => {
     const { donationId } = req.params;
@@ -247,7 +122,7 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
         });
     }
 
-    // Verify authorization
+    // Verify hospital authorization
     if (donation.hospitalId.toString() !== hospitalId) {
         return res.status(403).json({
             success: false,
@@ -255,97 +130,118 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
         });
     }
 
-    if (donation.status !== "completed") {
-        return res.status(400).json({
-            success: false,
-            message: "Only completed donations can be verified",
-        });
-    }
-
     if (isVerified) {
-        // Success verification
+        // Blood test passed
+        donation.status = "completed";
         donation.verificationStatus = "verified";
         donation.verifiedAt = new Date();
         donation.verifiedBy = hospitalId;
-        donation.hospitalVerificationNotes = verificationNotes || "Donation verified successfully";
-        await donation.save();
-
-        // Update blood request
-        await BloodRequest.findByIdAndUpdate(donation.requestId, {
-            status: "completed",
-            completedAt: new Date(),
-        });
-
-        // Get user details
-        const donor = await User.findById(donation.donorId).select("fullName");
-        const receiver = await User.findById(donation.receiverId).select("fullName");
-
-        // Notify donor
-        await Notification.create({
-            recipientId: donation.donorId,
-            message: `Your donation has been verified and confirmed. Thank you for saving a life!`,
-            type: "donation_verified",
-            relatedDonation: donationId,
-        });
-
-        // Notify receiver - MAIN SUCCESS NOTIFICATION
-        await Notification.create({
-            recipientId: donation.receiverId,
-            message: `Your blood donation from ${donor.fullName} has been successfully completed and verified. You will receive the blood shortly.`,
-            type: "request_completed",
-            relatedDonation: donationId,
-        });
-
-        return res.status(200).json({
-            success: true,
-            message: "Donation verified successfully",
-            data: {
-                donationId: donation._id,
-                status: "verified",
-                verifiedAt: donation.verifiedAt,
-            },
-        });
-    } else {
-        // Rejection
-        donation.verificationStatus = "rejected";
-        donation.verifiedAt = new Date();
-        donation.verifiedBy = hospitalId;
         donation.hospitalVerificationNotes =
-            verificationNotes || "Donation rejected";
+            verificationNotes || "Blood donation verified successfully";
+
         await donation.save();
 
-        // Get user details
-        const donor = await User.findById(donation.donorId).select("fullName");
+        // Update request
+        await BloodRequest.findByIdAndUpdate(
+            donation.requestId,
+            {
+                status: "completed",
+                bloodTestResult: "accepted",
+                completedAt: new Date(),
+            }
+        );
+
+        // Make donor available again
+        await User.findByIdAndUpdate(
+            donation.donorId,
+            {
+                availabilityStatus: "available",
+            }
+        );
 
         // Notify donor
         await Notification.create({
             recipientId: donation.donorId,
-            message: `Your donation was not verified. Reason: ${verificationNotes || "Medical reasons"}`,
-            type: "donation_rejected",
-            relatedDonation: donationId,
+            type: "blood_test_accepted",
+            relatedDonation: donation._id,
+            message:
+                "Your blood donation has been accepted and verified. Thank you for helping save a life.",
         });
 
         // Notify receiver
         await Notification.create({
             recipientId: donation.receiverId,
-            message: `The blood donation could not be verified. A new donor will be selected.`,
-            type: "donation_rejected",
-            relatedDonation: donationId,
-        });
-
-        // Reset request to pending for new donor selection
-        await BloodRequest.findByIdAndUpdate(donation.requestId, {
-            status: "pending",
-            selectedDonor: null,
-            assignedHospital: null,
+            type: "request_completed",
+            relatedDonation: donation._id,
+            message:
+                "A suitable blood donor has been verified and your request has been completed successfully.",
         });
 
         return res.status(200).json({
             success: true,
-            message: "Donation rejected",
+            message: "Blood donation verified successfully",
             data: {
                 donationId: donation._id,
-                status: "rejected",
+                status: donation.status,
+                verificationStatus: donation.verificationStatus,
+            },
+        });
+
+    } else {
+        // Blood test failed
+        donation.status = "rejected";
+        donation.verificationStatus = "rejected";
+        donation.verifiedAt = new Date();
+        donation.verifiedBy = hospitalId;
+        donation.hospitalVerificationNotes =
+            verificationNotes || "Blood donation rejected";
+
+        await donation.save();
+
+        // Reset request for next donor allocation
+        await BloodRequest.findByIdAndUpdate(
+            donation.requestId,
+            {
+                status: "waiting_for_donor",
+                bloodTestResult: "rejected",
+                selectedDonor: null,
+            }
+        );
+
+        // Make donor available again
+        await User.findByIdAndUpdate(
+            donation.donorId,
+            {
+                availabilityStatus: "available",
+            }
+        );
+
+        // Notify donor
+        await Notification.create({
+            recipientId: donation.donorId,
+            type: "blood_test_rejected",
+            relatedDonation: donation._id,
+            message:
+                verificationNotes ||
+                "Your blood donation was not accepted after testing.",
+        });
+
+        // Notify receiver
+        await Notification.create({
+            recipientId: donation.receiverId,
+            type: "blood_test_rejected",
+            relatedDonation: donation._id,
+            message:
+                "The selected donor was not eligible after testing. A new donor will be assigned shortly.",
+        });
+
+        return res.status(200).json({
+            success: true,
+            message: "Blood donation rejected",
+            data: {
+                donationId: donation._id,
+                status: donation.status,
+                verificationStatus: donation.verificationStatus,
             },
         });
     }
