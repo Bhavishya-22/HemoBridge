@@ -1,6 +1,6 @@
 const express = require("express");
 const hospitalVerificationController = require("../controllers/hospitalVerificationController");
-const hospitalVerifyBlood = require("../controllers/hospitalVerifyBlood");
+const hospitalVerifyBlood = require("../controllers/hospitalVerifyRequestController");
 
 const authMiddleware = require("../middlewares/authMiddleware");
 const adminOnly = require("../middlewares/adminOnlyMiddleware");

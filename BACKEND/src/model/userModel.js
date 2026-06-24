@@ -90,7 +90,6 @@ const userSchema = new mongoose.Schema(
         type: {
           type: String,
           enum: ["Point"],
-          default: "Point",
         },
         coordinates: {
           type: [Number], // [longitude, latitude] — MongoDB order
@@ -183,10 +182,9 @@ userSchema.index({ bloodGroup: 1, availabilityStatus: 1 }); // compound — dono
 userSchema.index({ hospitalVerificationStatus: 1 }); 
 // Password Hashing
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return next();
+  if (!this.isModified("password")) return;
 
   this.password = await bcrypt.hash(this.password, 10);
-  next();
 });
 
 // Compare Password

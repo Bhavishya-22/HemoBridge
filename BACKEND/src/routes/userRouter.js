@@ -4,7 +4,6 @@ const userController = require('../controllers/userController');
 const authMiddleware = require('../middlewares/authMiddleware');
 
 // Authentication routes
-userRouter.post('/auth/check-admin-email', userController.checkAdminEmail);
 userRouter.post('/auth/register', userController.userRegister);  
 userRouter.post('/auth/login', userController.userLogin);
 userRouter.post('/auth/logout', authMiddleware, userController.userLogout);

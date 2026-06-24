@@ -38,7 +38,7 @@ exports.userRegister = asyncHandler(async (req, res) => {
     }
 
     // Validate role
-    const validRoles = ["donor", "receiver", "hospital"];
+    const validRoles = ["donor", "receiver", "hospital","admin"];
     if (!validRoles.includes(role)) {
         return res.status(400).json({ 
             success: false,
@@ -284,22 +284,34 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
 // Excludes password and refreshToken from response.
 exports.userUpdateProfile = asyncHandler(async (req, res) => {
     const { phoneNumber, bloodGroup, age, weight, diseases, location } = req.body;
+
     const user = await User.findById(req.user.id);
 
-    // Do not allow role change in profile update
+    // Build update object safely
     const updateData = {
         phoneNumber,
         bloodGroup,
         age,
         weight,
         diseases,
-        location,
         profileCompleted: true
     };
 
-    // If user is hospital, don't include hospital fields here (handled separately)
-    if (user.role !== "hospital") {
-        // For non-hospital users, just update basic profile
+    // ✅ ONLY update location if valid GeoJSON exists
+    if (
+        location &&
+        location.coordinates &&
+        Array.isArray(location.coordinates.coordinates) &&
+        location.coordinates.coordinates.length === 2
+    ) {
+        updateData.location = {
+            city: location.city || "",
+            state: location.state || "",
+            coordinates: {
+                type: "Point",
+                coordinates: location.coordinates.coordinates
+            }
+        };
     }
 
     const updatedUser = await User.findByIdAndUpdate(

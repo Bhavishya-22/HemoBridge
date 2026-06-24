@@ -24,21 +24,13 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
             message: "Blood request not found",
         });
     }
-
-    if (
-        !request.selectedDonor ||
-        request.selectedDonor.toString() !== donorId
-    ) {
+    if (!request.selectedDonor ||request.selectedDonor.toString() !== donorId) {
         return res.status(403).json({
             success: false,
             message: "You are not assigned to this request",
         });
     }
-
-    if (
-        request.status === "completed" ||
-        request.status === "cancelled"
-    ) {
+    if (request.status === "completed" ||request.status === "cancelled") {
         return res.status(400).json({
             success: false,
             message: `Cannot accept request with status ${request.status}`,

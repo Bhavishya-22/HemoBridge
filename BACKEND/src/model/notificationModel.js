@@ -22,6 +22,7 @@ const notificationSchema = new mongoose.Schema(
       "donor_request",
       "donor_accepted",
       "donor_rejected",
+      "blood_request",
       "donor_on_hold",
       "next_donor_selected",
       "blood_test_accepted",
