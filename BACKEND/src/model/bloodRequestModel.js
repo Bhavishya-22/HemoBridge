@@ -1,4 +1,3 @@
-
 const mongoose = require("mongoose");
 
 const bloodRequestSchema = new mongoose.Schema(
@@ -24,20 +23,22 @@ const bloodRequestSchema = new mongoose.Schema(
       enum: ["low", "medium", "high", "critical"],
       default: "medium",
     },
-status: {
-  type: String,
-  enum: [
-    "pending_hospital_approval",
-    "hospital_approved",
-    "waiting_for_donor",
-    "donor_accepted",
-    "blood_testing",
-    "completed",
-    "rejected",
-    "cancelled",
-  ],
-  default: "pending_hospital_approval",
-},
+    status: {
+      type: String,
+      enum: [
+        "pending_hospital_approval",
+        "hospital_approved",
+        "waiting_for_donor",
+        "donor_accepted",
+        "blood_testing",
+        "admin_verified",
+        "blood_test_scheduled",
+        "final_completed",
+        "rejected",
+        "cancelled",
+      ],
+      default: "pending_hospital_approval",
+    },
 
     selectedDonor: {
       type: mongoose.Schema.Types.ObjectId,
@@ -61,9 +62,7 @@ status: {
       ref: "User",
       default: null,
     },
-    matchedAt: {
-      type: Date,
-    },
+    matchedAt: Date,
     location: {
       city: String,
       state: String,
@@ -77,30 +76,168 @@ status: {
     completedAt: Date,
     hospitalVerifiedAt: Date,
     hospitalApproved: {
-        type: Boolean,
-        default: false,
-      },
+      type: Boolean,
+      default: false,
+    },
+    hospitalApprovedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    hospitalApprovedAt: Date,
+    
+  // Admin selects from acceptances
+  adminVerified: {
+    type: Boolean,
+    default: false,
+  },
+  adminVerifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  adminVerifiedAt: Date,
 
-      hospitalApprovedBy: {
+  // Hospital schedules test
+  bloodTestScheduled: {
+    type: Boolean,
+    default: false,
+  },
+  bloodTestScheduledBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  bloodTestScheduledAt: Date,
+
+  // Track all donors who accepted 
+  acceptedDonors: [
+    {
+      donor: {
         type: mongoose.Schema.Types.ObjectId,
         ref: "User",
       },
-
-      hospitalApprovedAt: Date,
-
-
-      bloodTestResult: {
+      acceptedAt: Date,
+      status: {
         type: String,
-        enum: ["pending", "accepted", "rejected"],
-        default: "pending",
+        enum: ["accepted", "selected", "backup", "rejected"],
+        default: "accepted",
       },
+    },
+  ],
 
-      receiverConfirmed: {
-        type: Boolean,
-        default: false,
+  // Track rejected donors 
+  rejectedDonors: [
+    {
+      donor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
       },
+      reason: String,
+      rejectedAt: Date,
+    },
+  ],
 
-      receiverConfirmedAt: Date,
+  // Backup donors from acceptances 
+  backupDonorsOnHold: [
+    {
+      donor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      heldAt: Date,
+      status: {
+        type: String,
+        enum: ["hold", "active", "notified"],
+        default: "hold",
+      },
+    },
+  ],
+
+  // STEP 6: Receiver confirms blood test result (NEW)
+  // This tracks whether receiver confirmed success or failure
+  receiverBloodTestConfirmation: {
+    confirmedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    status: {
+      type: String,
+      enum: ["success", "failed"],
+      default: null,
+    },
+    message: String,
+    confirmedAt: Date,
+  },
+
+  // Track if final thank you/donation is complete
+  finalThankYouSent: {
+    type: Boolean,
+    default: false,
+  },
+  finalThankYouSentAt: Date,
+
+    donorNotificationSent: {
+      type: Boolean,
+      default: false,
+    },
+    lastDonorNotifiedAt: Date,
+
+    bloodTestResult: {
+      type: String,
+      enum: ["pending", "accepted", "rejected"],
+      default: "pending",
+    },
+
+    receiverConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+    receiverConfirmedAt: Date,
+
+    // 🔹 NEW donor queue logic
+    donorQueue: [
+      {
+        donor: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        sortedIndex: Number,
+        queuedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        notificationSentAt: Date,
+        status: {
+          type: String,
+          enum: ["pending", "notified", "accepted", "rejected", "timeout"],
+          default: "pending",
+        },
+      },
+    ],
+
+    currentDonorIndex: {
+      type: Number,
+      default: 0,
+    },
+
+    allDonorsRejected: {
+      type: Boolean,
+      default: false,
+    },
+
+    donorAcceptanceStatus: {
+      acceptedCount: {
+        type: Number,
+        default: 0,
+      },
+      acceptedDonors: [
+        {
+          donor: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+          },
+          acceptedAt: Date,
+        },
+      ],
+    },
   },
   {
     timestamps: true,

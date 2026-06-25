@@ -1,6 +1,7 @@
 const express = require("express");
 const hospitalVerificationController = require("../controllers/hospitalVerificationController");
 const hospitalVerifyBlood = require("../controllers/hospitalVerifyRequestController");
+const adminDonorAllocationController = require("../controllers/adminDonorAllocationController");
 
 const authMiddleware = require("../middlewares/authMiddleware");
 const adminOnly = require("../middlewares/adminOnlyMiddleware");
@@ -8,37 +9,44 @@ const hospitalOnly = require("../middlewares/hospitalOnlyMiddleware");
 
 const hospitalRouter = express.Router();
 
-// Hospital registration request (hospital user)
-hospitalRouter.post("/hospital/request-verification",authMiddleware,hospitalVerificationController.requestHospitalVerification);
+// Existing routes...
+hospitalRouter.post("/hospital/request-verification", authMiddleware, hospitalVerificationController.requestHospitalVerification);
+hospitalRouter.get("/admin/hospital-verification-requests", authMiddleware, adminOnly, hospitalVerificationController.getHospitalVerificationRequests);
+hospitalRouter.post("/admin/verify-hospital", authMiddleware, adminOnly, hospitalVerificationController.verifyHospital);
+hospitalRouter.get("/hospitals/all", hospitalVerificationController.getAllHospitals);
+hospitalRouter.get("/hospitals/:hospitalId", hospitalVerificationController.getHospitalDetails);
 
-// Admin verification routes
-hospitalRouter.get("/admin/hospital-verification-requests",authMiddleware,adminOnly,hospitalVerificationController.getHospitalVerificationRequests);
+// Blood request approval/rejection
+hospitalRouter.post("/hospital/approve-request/:requestId", authMiddleware, hospitalOnly, hospitalVerifyBlood.approveBloodRequest);
+hospitalRouter.post("/hospital/reject-request/:requestId", authMiddleware, hospitalOnly, hospitalVerifyBlood.rejectBloodRequest);
 
-hospitalRouter.post("/admin/verify-hospital",authMiddleware,adminOnly,hospitalVerificationController.verifyHospital);
-
-// Public route to get verified hospitals
-hospitalRouter.get("/hospitals/all",hospitalVerificationController.getAllHospitals);
-
-// Public route to get specific hospital details
-hospitalRouter.get("/hospitals/:hospitalId",hospitalVerificationController.getHospitalDetails);
-
-
-// Hospital approves blood request
+// NEW: Admin donor allocation routes
 hospitalRouter.post(
-  "/hospital/approve-request/:requestId",
+  "/admin/send-to-donor/:requestId",
   authMiddleware,
-  hospitalOnly,
-  hospitalVerifyBlood.approveBloodRequest
+  adminOnly,
+  adminDonorAllocationController.sendRequestToNextDonor
 );
 
-// Hospital rejects blood request
-hospitalRouter.post(
-  "/hospital/reject-request/:requestId",
+hospitalRouter.get(
+  "/admin/pending-actions",
   authMiddleware,
-  hospitalOnly,
-  hospitalVerifyBlood.rejectBloodRequest
+  adminOnly,
+  adminDonorAllocationController.getPendingAdminActions
 );
 
+hospitalRouter.get(
+  "/admin/active-requests",
+  authMiddleware,
+  adminOnly,
+  adminDonorAllocationController.getActiveRequests
+);
+
+hospitalRouter.get(
+  "/admin/request-details/:requestId",
+  authMiddleware,
+  adminOnly,
+  adminDonorAllocationController.getRequestWithDonorQueue
+);
 
 module.exports = hospitalRouter;
-

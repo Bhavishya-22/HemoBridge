@@ -57,16 +57,49 @@ exports.createRequest = asyncHandler(async (req, res) => {
 });
 
 exports.viewRequests = asyncHandler(async (req, res) => {
-    const requests = await BloodRequest.find({ status: "pending_hospital_approval" })
-        .populate("requestedBy", "fullName bloodGroup location phoneNumber")
-        .sort({ emergencyLevel: -1, createdAt: -1 });
+    const user = await User.findById(req.user.id);
 
+    if (!user || user.role !== "donor") {
+        return res.status(200).json({
+            success: true,
+            totalRequests: 0,
+            requests: [],
+            message: "Only donors can view requests."
+        });
+    }
+
+    console.log("Donor blood group:", user.bloodGroup);
+
+    const requests = await BloodRequest.find({
+        status: {
+            $in: ["hospital_approved", "donor_accepted"],
+        },
+        bloodGroup: {
+            $in: getCompatibleBloodGroups(user.bloodGroup),
+        },
+    });
+    // console.log(requests);
     res.status(200).json({
         success: true,
         totalRequests: requests.length,
-        requests,
+        requests
     });
 });
+
+// Helper function
+function getCompatibleBloodGroups(bloodGroup) {
+    const compatibility = {
+        "O+": ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"],
+        "O-": ["O-", "A-", "B-", "AB-"],
+        "A+": ["A+", "A-", "O+", "O-", "AB+", "AB-"],
+        "A-": ["A-", "O-", "AB-"],
+        "B+": ["B+", "B-", "O+", "O-", "AB+", "AB-"],
+        "B-": ["B-", "O-", "AB-"],
+        "AB+": ["AB+", "AB-", "A+", "A-", "B+", "B-", "O+", "O-"],
+        "AB-": ["AB-", "A-", "B-", "O-"],
+    };
+    return compatibility[bloodGroup] || [bloodGroup];
+}
 
 exports.myRequests = asyncHandler(async (req, res) => {
     const requests = await BloodRequest.find({

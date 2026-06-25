@@ -24,63 +24,68 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
             message: "Blood request not found",
         });
     }
-    if (request.status === "donor_accepted") {
-    return res.status(400).json({
-        success: false,
-        message: "Request already accepted by a donor",
-    });
-    }
-    if (
-        !request.notifiedDonors ||
-        !request.notifiedDonors.some(
-            donor =>
-                donor._id &&
-                donor._id.toString() === donorId.toString()
-        )
-    ) {
+
+    // Allow donors to accept when request is either hospital approved
+    // or already has other donor acceptances
+    const allowedStatuses = [
+        "hospital_approved",
+        "donor_accepted",
+    ];
+
+    if (!allowedStatuses.includes(request.status)) {
         return res.status(403).json({
             success: false,
-            message: "You are not notified for this request",
-        });
-    }
-    if (request.status === "completed" ||request.status === "cancelled") {
-        return res.status(400).json({
-            success: false,
-            message: `Cannot accept request with status ${request.status}`,
+            message: "This request is not open for donor acceptance",
         });
     }
 
-    request.selectedDonor = donorId;
-    request.status = "donor_accepted";
+    // Check if this donor already accepted
+    const alreadyAccepted = request.acceptedDonors.some(
+        (item) => item.donor.toString() === donorId.toString()
+    );
+
+    if (alreadyAccepted) {
+        return res.status(400).json({
+            success: false,
+            message: "You already accepted this request",
+        });
+    }
+
+    // Add donor to accepted list
+    request.acceptedDonors.push({
+        donor: donorId,
+        acceptedAt: new Date(),
+        status: "accepted",
+    });
+
+    // Change status only on first acceptance
+    if (request.status === "hospital_approved") {
+        request.status = "donor_accepted";
+    }
 
     await request.save();
 
-    const donation = await DonationRecord.create({
-        donorId,
-        receiverId: request.requestedBy,
-        requestId: request._id,
-        hospitalId: request.hospitalApprovedBy,
-        status: "donor_accepted",
-        verificationStatus: "pending",
-    });
+    const donor = await User.findById(donorId).select(
+        "fullName phoneNumber"
+    );
 
-    const donor = await User.findById(donorId).select("fullName");
-
+    // Notify receiver
     await Notification.create({
         recipientId: request.requestedBy,
         type: "donor_accepted",
         relatedRequest: request._id,
-        relatedDonation: donation._id,
-        message: `${donor.fullName} accepted your blood request.`,
+        message: `${donor.fullName} has accepted your blood request!`,
+        priority: "high",
     });
 
+    // Notify hospital
     if (request.assignedHospital) {
         await Notification.create({
             recipientId: request.assignedHospital,
             type: "donor_accepted",
             relatedRequest: request._id,
-            relatedDonation: donation._id,
-            message: `${donor.fullName} accepted the blood donation request.`,
+            message: `${donor.fullName} accepted the blood request.`,
+            priority: "high",
         });
     }
 
@@ -89,14 +94,16 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
         message: "Request accepted successfully",
         data: {
             requestId: request._id,
-            donationId: donation._id,
             status: request.status,
+            donorName: donor.fullName,
+            totalAcceptances: request.acceptedDonors.length,
         },
     });
 });
 
 exports.rejectRequest = asyncHandler(async (req, res) => {
     const { requestId } = req.params;
+    const { rejectionReason } = req.body;
     const donorId = req.user.id;
 
     if (!mongoose.Types.ObjectId.isValid(requestId)) {
@@ -114,36 +121,38 @@ exports.rejectRequest = asyncHandler(async (req, res) => {
             message: "Blood request not found",
         });
     }
-    if (
-        !request.notifiedDonors ||
-        !request.notifiedDonors.some(
-            id => id.toString() === donorId.toString()
-        )
-    ) {
+
+    // Check if request is in hospital_approved status
+    if (request.status !== "hospital_approved") {
         return res.status(403).json({
             success: false,
-            message: "You are not notified for this request",
+            message: "This request is not open for acceptance",
         });
     }
 
-    request.selectedDonor = null;
-    request.status = "waiting_for_donor";
+    // Add to rejected donors list
+    request.rejectedDonors.push({
+        donor: donorId,
+        reason: rejectionReason || "Donor rejected",
+        rejectedAt: new Date(),
+    });
 
+    // Keep status as hospital_approved so other donors can see it
     await request.save();
 
-    if (request.assignedHospital) {
-        await Notification.create({
-            recipientId: request.assignedHospital,
-            type: "donor_rejected",
-            relatedRequest: request._id,
-            message:
-                "Assigned donor rejected the request. Please allocate another donor.",
-        });
-    }
+    const donor = await User.findById(donorId).select("fullName");
+
+    // Notify hospital about rejection
+    await Notification.create({
+        recipientId: request.assignedHospital,
+        type: "donor_rejected",
+        relatedRequest: request._id,
+        message: `${donor.fullName} rejected the blood request.`,
+    });
 
     return res.status(200).json({
         success: true,
-        message: "Request rejected successfully",
+        message: "Request rejected",
         data: {
             requestId: request._id,
             status: request.status,

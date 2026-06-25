@@ -16,20 +16,48 @@ const notificationSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: [
-      "hospital_approval_required",
-      "hospital_approved",
-      "hospital_rejected",
-      "donor_request",
-      "donor_accepted",
-      "donor_rejected",
-      "blood_request",
-      "donor_on_hold",
-      "next_donor_selected",
-      "blood_test_accepted",
-      "blood_test_rejected",
-      "request_completed",
-      "general",
-    ],
+        // ===== STEP 2: Hospital Approval =====
+        "hospital_approval_required",
+        "hospital_approved",
+        "hospital_rejected",
+
+        // ===== STEP 3: Donor Accept/Reject =====
+        "donor_request",
+        "donor_accepted",
+        "donor_rejected",
+
+        // ===== STEP 4: Admin Verification =====
+        "admin_selected_for_test",
+        "donor_on_backup",
+        "admin_selected_donor",
+
+        // ===== STEP 5: Blood Test Scheduling =====
+        "blood_test_scheduled",
+
+        // ===== STEP 6: Blood Test Verification =====
+        "blood_test_accepted",
+        "blood_test_rejected",
+        "blood_donation_thank_you",
+        "blood_donation_completed",
+        "backup_donor_thanks",
+        "donor_not_selected_thanks",
+        "donor_rejection_thanks",
+        "blood_test_failed",
+        "blood_test_failed_next_donor",
+        "all_donors_exhausted",
+
+        // ===== STEP 7: Receiver Confirmation =====
+        "receiver_thank_you",
+        "receiver_thank_you_backup",
+        "receiver_thank_you_accepted",
+        "receiver_thank_you_all",
+
+        // ===== GENERAL =====
+        "request_completed",
+        "blood_request",
+        "next_donor_selected",
+        "general",
+      ],
       required: true,
     },
 
@@ -53,10 +81,11 @@ const notificationSchema = new mongoose.Schema(
       enum: ["sent", "delivered", "read"],
       default: "sent",
     },
+
     priority: {
-    type: String,
-    enum: ["low", "normal", "high", "critical"],
-    default: "normal",
+      type: String,
+      enum: ["low", "normal", "high", "critical"],
+      default: "normal",
     },
   },
   {
