@@ -5,33 +5,238 @@ const bloodRequestSchema = new mongoose.Schema(
     requestedBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-    },
-
-    bloodGroup: {
-      type: String,
       required: true,
     },
-
+    bloodGroup: {
+      type: String,
+      enum: ["O+", "O-", "A+", "A-", "B+", "B-", "AB+", "AB-"],
+      required: true,
+    },
     quantity: {
       type: Number,
       required: true,
+      min: 1,
+      max: 10,
     },
-
     emergencyLevel: {
       type: String,
-      enum: ["normal", "urgent", "critical"],
-      default: "normal",
+      enum: ["low", "medium", "high", "critical"],
+      default: "medium",
     },
-
     status: {
       type: String,
-      enum: ["pending", "accepted", "completed", "cancelled"],
+      enum: [
+        "pending_hospital_approval",
+        "hospital_approved",
+        "waiting_for_donor",
+        "donor_accepted",
+        "blood_testing",
+        "admin_verified",
+        "blood_test_scheduled",
+        "final_completed",
+        "rejected",
+        "cancelled",
+      ],
+      default: "pending_hospital_approval",
+    },
+
+    selectedDonor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    notifiedDonors: [
+      {
+        donor: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        notifiedAt: {
+          type: Date,
+          default: Date.now,
+        },
+      },
+    ],
+    assignedHospital: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    matchedAt: Date,
+    location: {
+      city: String,
+      state: String,
+      coordinates: {
+        lat: Number,
+        lng: Number,
+      },
+    },
+    hospitalName: String,
+    description: String,
+    completedAt: Date,
+    hospitalVerifiedAt: Date,
+    hospitalApproved: {
+      type: Boolean,
+      default: false,
+    },
+    hospitalApprovedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    hospitalApprovedAt: Date,
+    
+  // Admin selects from acceptances
+  adminVerified: {
+    type: Boolean,
+    default: false,
+  },
+  adminVerifiedBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  adminVerifiedAt: Date,
+
+  // Hospital schedules test
+  bloodTestScheduled: {
+    type: Boolean,
+    default: false,
+  },
+  bloodTestScheduledBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+  },
+  bloodTestScheduledAt: Date,
+
+  // Track all donors who accepted 
+  acceptedDonors: [
+    {
+      donor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      acceptedAt: Date,
+      status: {
+        type: String,
+        enum: ["accepted", "selected", "backup", "rejected"],
+        default: "accepted",
+      },
+    },
+  ],
+
+  // Track rejected donors 
+  rejectedDonors: [
+    {
+      donor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      reason: String,
+      rejectedAt: Date,
+    },
+  ],
+
+  // Backup donors from acceptances 
+  backupDonorsOnHold: [
+    {
+      donor: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+      heldAt: Date,
+      status: {
+        type: String,
+        enum: ["hold", "active", "notified"],
+        default: "hold",
+      },
+    },
+  ],
+
+  // STEP 6: Receiver confirms blood test result (NEW)
+  // This tracks whether receiver confirmed success or failure
+  receiverBloodTestConfirmation: {
+    confirmedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    status: {
+      type: String,
+      enum: ["success", "failed"],
+      default: null,
+    },
+    message: String,
+    confirmedAt: Date,
+  },
+
+  // Track if final thank you/donation is complete
+  finalThankYouSent: {
+    type: Boolean,
+    default: false,
+  },
+  finalThankYouSentAt: Date,
+
+    donorNotificationSent: {
+      type: Boolean,
+      default: false,
+    },
+    lastDonorNotifiedAt: Date,
+
+    bloodTestResult: {
+      type: String,
+      enum: ["pending", "accepted", "rejected"],
       default: "pending",
     },
 
-    acceptedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+    receiverConfirmed: {
+      type: Boolean,
+      default: false,
+    },
+    receiverConfirmedAt: Date,
+
+    // 🔹 NEW donor queue logic
+    donorQueue: [
+      {
+        donor: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+        },
+        sortedIndex: Number,
+        queuedAt: {
+          type: Date,
+          default: Date.now,
+        },
+        notificationSentAt: Date,
+        status: {
+          type: String,
+          enum: ["pending", "notified", "accepted", "rejected", "timeout"],
+          default: "pending",
+        },
+      },
+    ],
+
+    currentDonorIndex: {
+      type: Number,
+      default: 0,
+    },
+
+    allDonorsRejected: {
+      type: Boolean,
+      default: false,
+    },
+
+    donorAcceptanceStatus: {
+      acceptedCount: {
+        type: Number,
+        default: 0,
+      },
+      acceptedDonors: [
+        {
+          donor: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
+          },
+          acceptedAt: Date,
+        },
+      ],
     },
   },
   {
@@ -39,19 +244,9 @@ const bloodRequestSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model(
-  "BloodRequest",
-  bloodRequestSchema
-);
+bloodRequestSchema.index({ status: 1, createdAt: -1 });
+bloodRequestSchema.index({ requestedBy: 1 });
+bloodRequestSchema.index({ bloodGroup: 1, status: 1 });
+bloodRequestSchema.index({ assignedHospital: 1, status: 1 });
 
-bloodRequestSchema.pre("save", function (next) {
-  if (
-    this.acceptedBy &&
-    this.requestedBy.equals(this.acceptedBy)
-  ) {
-    return next(
-      new Error("You cannot accept your own blood request.")
-    );
-  }
-  next();
-});
+module.exports = mongoose.model("BloodRequest", bloodRequestSchema);

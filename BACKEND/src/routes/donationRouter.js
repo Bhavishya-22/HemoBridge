@@ -1,15 +1,46 @@
 const express = require("express");
+const donationController = require("../controllers/donationController");
+const authMiddleware = require("../middlewares/authMiddleware");
+const donorOnly = require("../middlewares/donorOnlyMiddleware");
+const hospitalOnly = require("../middlewares/hospitalOnlyMiddleware");
 
-const donationController =
-require("../controllers/donationController");
+const donationRouter = express.Router();
 
-const authMiddleware =
-require("../middlewares/authMiddleware");
+// Common
+donationRouter.get(
+  "/donations/:donationId",
+  authMiddleware,
+  donationController.getDonationStatus
+);
 
-const donationRouter =
-express.Router();
+// Donor
+donationRouter.get(
+  "/donor/donations",
+  authMiddleware,
+  donorOnly,
+  donationController.getDonorDonations
+);
 
-donationRouter.post("/donations/verify/:id",authMiddleware,donationController.verifyDonation
+// Receiver
+donationRouter.get(
+  "/receiver/donations",
+  authMiddleware,
+  donationController.getReceiverDonations
+);
+
+// Hospital
+donationRouter.get(
+  "/hospital/donations",
+  authMiddleware,
+  hospitalOnly,
+  donationController.getHospitalDonations
+);
+
+donationRouter.post(
+  "/donations/:donationId/verify",
+  authMiddleware,
+  hospitalOnly,
+  donationController.verifyDonation
 );
 
 module.exports = donationRouter;
