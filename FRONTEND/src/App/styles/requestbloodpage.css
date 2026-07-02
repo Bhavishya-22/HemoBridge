@@ -1,0 +1,371 @@
+/* ============================================================
+   RequestBloodPage — matches the app's crimson/rose design system
+   Fonts: Sora (headings), Inter (body)
+   ============================================================ */
+
+.request-page {
+  --crimson: #b3123a;
+  --crimson-dark: #8c0e2d;
+  --rose: #fdf0f2;
+  --rose-border: #f3d6dc;
+  --ink: #241417;
+  --muted: #7a6a6d;
+  --success: #1f8a4c;
+  --radius: 14px;
+
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 48px 24px 96px;
+  font-family: "Inter", sans-serif;
+  color: var(--ink);
+}
+
+/* ---------- Header ---------- */
+
+.request-page__header {
+  margin-bottom: 40px;
+}
+
+.eyebrow {
+  font-family: "Sora", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--crimson);
+  margin: 0 0 8px;
+}
+
+.request-page__header h1 {
+  font-family: "Sora", sans-serif;
+  font-size: 32px;
+  font-weight: 700;
+  margin: 0 0 12px;
+  line-height: 1.2;
+}
+
+.request-page__subtitle {
+  color: var(--muted);
+  font-size: 15px;
+  line-height: 1.6;
+  max-width: 560px;
+  margin: 0;
+}
+
+/* ---------- Form sections ---------- */
+
+.request-form {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.form-section {
+  background: #fff;
+  border: 1px solid var(--rose-border);
+  border-radius: var(--radius);
+  padding: 28px;
+}
+
+.form-section__header {
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 22px;
+}
+
+.form-section__step {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: var(--rose);
+  color: var(--crimson);
+  font-family: "Sora", sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.form-section__title {
+  font-family: "Sora", sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.form-section__desc {
+  font-size: 13.5px;
+  color: var(--muted);
+  margin: 0;
+}
+
+/* ---------- Fields ---------- */
+
+.field-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field--span2 {
+  grid-column: 1 / -1;
+}
+
+.field-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.required-mark {
+  color: var(--crimson);
+}
+
+.field-hint {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0 0 4px;
+}
+
+input,
+select,
+textarea {
+  font-family: "Inter", sans-serif;
+  font-size: 14px;
+  padding: 11px 14px;
+  border: 1px solid var(--rose-border);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--ink);
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  border-color: var(--crimson);
+  box-shadow: 0 0 0 3px rgba(179, 18, 58, 0.12);
+}
+
+textarea {
+  resize: vertical;
+}
+
+.field-error {
+  font-size: 12px;
+  color: var(--crimson-dark);
+  margin: 2px 0 0;
+}
+
+.form-error-banner {
+  background: var(--rose);
+  border: 1px solid var(--rose-border);
+  color: var(--crimson-dark);
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 13.5px;
+}
+
+/* ---------- Upload boxes ---------- */
+
+.upload-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.upload-box {
+  border: 1.5px dashed var(--rose-border);
+  border-radius: 12px;
+  padding: 22px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  color: var(--muted);
+}
+
+.upload-box:hover,
+.upload-box--dragover {
+  border-color: var(--crimson);
+  background: var(--rose);
+}
+
+.upload-box--filled {
+  border-style: solid;
+  text-align: left;
+}
+
+.upload-box__icon {
+  font-size: 20px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.upload-box__types {
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.upload-box__file {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.upload-box__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.upload-box__name {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upload-box__size {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+
+.upload-box__remove {
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.upload-box__remove:hover {
+  color: var(--crimson);
+}
+
+/* ---------- Actions ---------- */
+
+.request-form__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn {
+  font-family: "Sora", sans-serif;
+  font-size: 14.5px;
+  font-weight: 600;
+  padding: 13px 28px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: none;
+  transition: transform 0.1s ease, opacity 0.15s ease;
+}
+
+.btn:active {
+  transform: scale(0.98);
+}
+
+.btn--primary {
+  background: var(--crimson);
+  color: #fff;
+}
+
+.btn--primary:hover {
+  background: var(--crimson-dark);
+}
+
+.btn--primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.btn--outline {
+  background: #fff;
+  border: 1.5px solid var(--crimson);
+  color: var(--crimson);
+}
+
+.btn--outline:hover {
+  background: var(--rose);
+}
+
+/* ---------- Success state ---------- */
+
+.request-success {
+  background: #fff;
+  border: 1px solid var(--rose-border);
+  border-radius: var(--radius);
+  padding: 48px 32px;
+  text-align: center;
+  max-width: 480px;
+  margin: 40px auto;
+}
+
+.request-success__icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #e7f7ee;
+  color: var(--success);
+  font-size: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+}
+
+.request-success h1 {
+  font-family: "Sora", sans-serif;
+  font-size: 22px;
+  margin: 0 0 10px;
+}
+
+.request-success p {
+  color: var(--muted);
+  font-size: 14.5px;
+  line-height: 1.6;
+  margin: 0 0 18px;
+}
+
+.status-pill {
+  display: inline-block;
+  font-family: "Sora", sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 999px;
+  margin-bottom: 18px;
+}
+
+.status-pill--waiting {
+  background: #fff4e0;
+  color: #9a6400;
+}
+
+.request-success__note {
+  font-size: 13.5px;
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 640px) {
+  .field-grid {
+    grid-template-columns: 1fr;
+  }
+  .request-page__header h1 {
+    font-size: 26px;
+  }
+}
