@@ -283,7 +283,7 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
 // Updates user profile fields and marks profile as completed.
 // Excludes password and refreshToken from response.
 exports.userUpdateProfile = asyncHandler(async (req, res) => {
-    const { phoneNumber, bloodGroup, age, weight, diseases, location } = req.body;
+    const { phoneNumber, bloodGroup, age, weight, diseases, location, role } = req.body;
 
     const user = await User.findById(req.user.id);
 
@@ -296,6 +296,11 @@ exports.userUpdateProfile = asyncHandler(async (req, res) => {
         diseases,
         profileCompleted: true
     };
+
+    const validRoles = ["donor", "receiver", "hospital"];
+    if (role && validRoles.includes(role)) {
+        updateData.role = role;
+    }
 
     // ✅ ONLY update location if valid GeoJSON exists
     if (
