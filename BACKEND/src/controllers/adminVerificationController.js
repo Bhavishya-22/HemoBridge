@@ -186,3 +186,69 @@ exports.getPendingAdminVerifications = asyncHandler(async (req, res) => {
         })),
     });
 });
+
+// Admin dashboard: get hospitals pending verification
+exports.getPendingHospitals = asyncHandler(async (req, res) => {
+    const hospitals = await User.find({
+        role: "hospital",
+        hospitalVerificationStatus: "pending",
+    }).select("fullName email hospitalName registrationNumber hospitalAddress hospitalPhone createdAt");
+
+    return res.status(200).json({
+        success: true,
+        total: hospitals.length,
+        hospitals,
+    });
+});
+
+// Admin dashboard: verify/reject a hospital
+exports.adminVerifyHospital = asyncHandler(async (req, res) => {
+    const { hospitalId } = req.params;
+    const { action, notes } = req.body; // action: "approve" | "reject"
+
+    if (!mongoose.Types.ObjectId.isValid(hospitalId)) {
+        return res.status(400).json({ success: false, message: "Invalid hospital ID" });
+    }
+
+    const hospital = await User.findOne({ _id: hospitalId, role: "hospital" });
+    if (!hospital) {
+        return res.status(404).json({ success: false, message: "Hospital not found" });
+    }
+
+    if (action === "approve") {
+        hospital.hospitalVerified = true;
+        hospital.hospitalVerificationStatus = "verified";
+    } else if (action === "reject") {
+        hospital.hospitalVerified = false;
+        hospital.hospitalVerificationStatus = "rejected";
+    } else {
+        return res.status(400).json({ success: false, message: "Action must be 'approve' or 'reject'" });
+    }
+
+    hospital.hospitalVerificationNotes = notes || "";
+    hospital.hospitalVerifiedBy = req.user.id;
+    hospital.hospitalVerifiedAt = new Date();
+    await hospital.save({ validateBeforeSave: false });
+
+    return res.status(200).json({
+        success: true,
+        message: `Hospital ${action === "approve" ? "approved" : "rejected"} successfully`,
+        hospitalVerified: hospital.hospitalVerified,
+        hospitalVerificationStatus: hospital.hospitalVerificationStatus,
+    });
+});
+
+// Admin dashboard: get ALL blood requests
+exports.getAllRequests = asyncHandler(async (req, res) => {
+    const requests = await BloodRequest.find({})
+        .populate("requestedBy", "fullName email")
+        .populate("assignedHospital", "hospitalName fullName")
+        .sort({ createdAt: -1 })
+        .limit(100);
+
+    return res.status(200).json({
+        success: true,
+        total: requests.length,
+        requests,
+    });
+});

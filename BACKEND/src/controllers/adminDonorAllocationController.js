@@ -1,179 +1,149 @@
 const mongoose = require("mongoose");
+const asyncHandler = require("express-async-handler");
 const BloodRequest = require("../model/bloodRequestModel");
 const Notification = require("../model/notificationModel");
 const User = require("../model/userModel");
-const asyncHandler = require("express-async-handler");
+const { REQUEST_STATUSES } = require("../utils/stateMachine");
+const { escalateToNextDonor } = require("../utils/donorSelectionService");
 
-// Admin sends request to the current donor in queue
+/**
+ * Admin manual override: manually escalate to the next donor in queue if necessary.
+ * Utilizes the shared donorSelectionService.
+ */
 exports.sendRequestToNextDonor = asyncHandler(async (req, res) => {
-    const { requestId } = req.params;
-    const adminId = req.user.id;
+  const { requestId } = req.params;
+  const adminId = req.user.id;
 
-    if (!mongoose.Types.ObjectId.isValid(requestId)) {
-        return res.status(400).json({
-            success: false,
-            message: "Invalid request ID",
-        });
-    }
-
-    const request = await BloodRequest.findById(requestId)
-        .populate("donorQueue.donor", "fullName email phoneNumber location");
-
-    if (!request) {
-        return res.status(404).json({
-            success: false,
-            message: "Blood request not found",
-        });
-    }
-
-    if (request.status !== "hospital_approved") {
-        return res.status(400).json({
-            success: false,
-            message: "Request is not in hospital_approved status",
-        });
-    }
-
-    // Check if all donors have been tried
-    if (request.currentDonorIndex >= request.donorQueue.length) {
-        return res.status(400).json({
-            success: false,
-            message: "All donors have been contacted. No more donors available.",
-        });
-    }
-
-    const currentDonorData = request.donorQueue[request.currentDonorIndex];
-    const donorId = currentDonorData.donor._id;
-
-    // Update queue status
-    currentDonorData.status = "notified";
-    currentDonorData.notificationSentAt = new Date();
-
-    // Update request status
-    request.status = "waiting_for_donor";
-    request.selectedDonor = donorId;
-
-    await request.save();
-
-    // Send notification to donor
-    const donor = await User.findById(donorId);
-    const receiver = await User.findById(request.requestedBy);
-
-    await Notification.create({
-        recipientId: donorId,
-        relatedRequest: request._id,
-        type: "blood_request",
-        message: `Blood group ${request.bloodGroup} needed urgently (${request.emergencyLevel}). Patient details: ${receiver.fullName}. Accept to help save a life!`,
-        priority: request.emergencyLevel === "critical" ? "high" : "normal",
+  if (!mongoose.Types.ObjectId.isValid(requestId)) {
+    return res.status(400).json({
+      success: false,
+      message: "Invalid request ID",
     });
+  }
 
-    // Notify admin
-    await Notification.create({
-        recipientId: adminId,
-        relatedRequest: request._id,
-        type: "donor_notified",
-        message: `Request sent to ${donor.fullName}. Waiting for response...`,
-    });
+  const result = await escalateToNextDonor(requestId, {
+    reason: "admin_override",
+    actorId: adminId,
+    actorRole: "admin",
+    note: "Admin manually triggered escalation to next donor",
+  });
 
-    return res.status(200).json({
-        success: true,
-        message: "Request sent to donor",
-        data: {
-            requestId: request._id,
-            donorId: donorId,
-            donorName: donor.fullName,
-            donorIndex: request.currentDonorIndex + 1,
-            totalDonors: request.donorQueue.length,
-            status: "waiting_for_donor",
-        },
+  if (!result.success) {
+    return res.status(400).json({
+      success: false,
+      message: result.message,
     });
+  }
+
+  return res.status(200).json({
+    success: true,
+    message: result.message,
+    data: {
+      requestId,
+      status: result.status,
+      nextDonorId: result.nextDonorId,
+    },
+  });
 });
 
-// Get pending requests waiting for admin action
+/**
+ * Get requests requiring administrative attention (e.g. no donors available or pending verification).
+ */
 exports.getPendingAdminActions = asyncHandler(async (req, res) => {
-    const requests = await BloodRequest.find({
-        status: "hospital_approved",
-        $expr: { $eq: ["$currentDonorIndex", 0] }, // Not yet sent to any donor
-    })
-        .populate("requestedBy", "fullName bloodGroup location")
-        .populate("donorQueue.donor", "fullName location")
-        .sort({ emergencyLevel: -1, createdAt: -1 });
+  const requests = await BloodRequest.find({
+    status: {
+      $in: [REQUEST_STATUSES.NO_DONORS_AVAILABLE, REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL],
+    },
+  })
+    .populate("requestedBy", "fullName bloodGroup location")
+    .populate("donorQueue.donor", "fullName location bloodGroup")
+    .sort({ emergencyLevel: -1, createdAt: -1 });
 
-    res.status(200).json({
-        success: true,
-        totalPending: requests.length,
-        requests: requests.map((req) => ({
-            requestId: req._id,
-            receiver: req.requestedBy,
-            bloodGroup: req.bloodGroup,
-            quantity: req.quantity,
-            emergencyLevel: req.emergencyLevel,
-            totalDonorsInQueue: req.donorQueue.length,
-            status: req.status,
-            createdAt: req.createdAt,
-        })),
-    });
+  res.status(200).json({
+    success: true,
+    totalPending: requests.length,
+    requests: requests.map((r) => ({
+      requestId: r._id,
+      receiver: r.requestedBy,
+      bloodGroup: r.bloodGroup,
+      quantity: r.quantity,
+      emergencyLevel: r.emergencyLevel,
+      totalDonorsInQueue: r.donorQueue?.length || 0,
+      status: r.status,
+      createdAt: r.createdAt,
+    })),
+  });
 });
 
-// Get active requests (waiting for donor response)
+/**
+ * Get active requests currently waiting for a donor response.
+ */
 exports.getActiveRequests = asyncHandler(async (req, res) => {
-    const requests = await BloodRequest.find({
-        status: "waiting_for_donor",
-    })
-        .populate("requestedBy", "fullName location")
-        .populate("selectedDonor", "fullName location")
-        .sort({ updatedAt: -1 });
+  const requests = await BloodRequest.find({
+    status: REQUEST_STATUSES.WAITING_FOR_DONOR,
+  })
+    .populate("requestedBy", "fullName location")
+    .populate("selectedDonor", "fullName location phoneNumber bloodGroup")
+    .sort({ updatedAt: -1 });
 
-    res.status(200).json({
-        success: true,
-        totalActive: requests.length,
-        requests: requests.map((req) => ({
-            requestId: req._id,
-            receiver: req.requestedBy,
-            selectedDonor: req.selectedDonor,
-            bloodGroup: req.bloodGroup,
-            emergencyLevel: req.emergencyLevel,
-            waitingSince: req.updatedAt,
-        })),
-    });
+  res.status(200).json({
+    success: true,
+    totalActive: requests.length,
+    requests: requests.map((r) => ({
+      requestId: r._id,
+      receiver: r.requestedBy,
+      selectedDonor: r.selectedDonor,
+      bloodGroup: r.bloodGroup,
+      emergencyLevel: r.emergencyLevel,
+      donorResponseDeadline: r.donorResponseDeadline,
+      waitingSince: r.updatedAt,
+      status: r.status,
+    })),
+  });
 });
 
-// Get request details with full donor queue
+/**
+ * Get request details including full donor queue and held states.
+ */
 exports.getRequestWithDonorQueue = asyncHandler(async (req, res) => {
-    const { requestId } = req.params;
+  const { requestId } = req.params;
 
-    const request = await BloodRequest.findById(requestId)
-        .populate("requestedBy", "fullName email phoneNumber location")
-        .populate("donorQueue.donor", "fullName email phoneNumber location availabilityStatus")
-        .populate("selectedDonor", "fullName email phoneNumber");
+  const request = await BloodRequest.findById(requestId)
+    .populate("requestedBy", "fullName email phoneNumber location")
+    .populate("donorQueue.donor", "fullName email phoneNumber location bloodGroup availabilityStatus")
+    .populate("selectedDonor", "fullName email phoneNumber bloodGroup");
 
-    if (!request) {
-        return res.status(404).json({
-            success: false,
-            message: "Request not found",
-        });
-    }
-
-    res.status(200).json({
-        success: true,
-        data: {
-            request: {
-                requestId: request._id,
-                receiver: request.requestedBy,
-                bloodGroup: request.bloodGroup,
-                quantity: request.quantity,
-                emergencyLevel: request.emergencyLevel,
-                status: request.status,
-                hospitalApprovedAt: request.hospitalApprovedAt,
-            },
-            donorQueue: request.donorQueue.map((item, index) => ({
-                queuePosition: index + 1,
-                donor: item.donor,
-                status: item.status,
-                notificationSentAt: item.notificationSentAt,
-                isCurrentDonor: index === request.currentDonorIndex,
-            })),
-            selectedDonor: request.selectedDonor,
-            currentDonorIndex: request.currentDonorIndex,
-        },
+  if (!request) {
+    return res.status(404).json({
+      success: false,
+      message: "Request not found",
     });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: {
+      request: {
+        requestId: request._id,
+        receiver: request.requestedBy,
+        bloodGroup: request.bloodGroup,
+        quantity: request.quantity,
+        emergencyLevel: request.emergencyLevel,
+        status: request.status,
+        hospitalApprovedAt: request.hospitalApprovedAt,
+        donorResponseDeadline: request.donorResponseDeadline,
+      },
+      donorQueue: (request.donorQueue || []).map((item, index) => ({
+        queuePosition: index + 1,
+        donor: item.donor,
+        distanceKm: item.distanceKm,
+        status: item.status,
+        notificationSentAt: item.notificationSentAt,
+        responseDeadline: item.responseDeadline,
+        isCurrentDonor: index === request.currentDonorIndex,
+      })),
+      selectedDonor: request.selectedDonor,
+      currentDonorIndex: request.currentDonorIndex,
+    },
+  });
 });

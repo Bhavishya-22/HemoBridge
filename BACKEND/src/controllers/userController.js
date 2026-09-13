@@ -30,26 +30,26 @@ exports.userRegister = asyncHandler(async (req, res) => {
     const { username, fullName, email, password, role } = req.body;
 
     // Validation
-    if (!email || !username || !fullName || !password || !role) {
+    if (!email || !username || !fullName || !password) {
         return res.status(400).json({ 
             success: false,
-            message: "All fields are required" 
+            message: "Full name, username, email, and password are required" 
         });
     }
 
-    // Validate role
-    const validRoles = ["donor", "receiver", "hospital","admin"];
-    if (!validRoles.includes(role)) {
+    // Validate role if provided, otherwise default to "donor"
+    const userRole = role ? role.toLowerCase().trim() : "donor";
+    const validRoles = ["donor", "receiver", "hospital", "admin"];
+    if (!validRoles.includes(userRole)) {
         return res.status(400).json({ 
             success: false,
             message: "Invalid role selected" 
         });
     }
 
-
     // Check if user already exists
     const existingUser = await User.findOne({ 
-        $or: [{ email }, { username }]
+        $or: [{ email: email.toLowerCase().trim() }, { username: username.toLowerCase().trim() }]
     });
 
     if (existingUser) {
@@ -61,11 +61,11 @@ exports.userRegister = asyncHandler(async (req, res) => {
 
     // Create new user
     const newUser = await User.create({
-        username,
-        fullName,
-        email,
+        username: username.toLowerCase().trim(),
+        fullName: fullName.trim(),
+        email: email.toLowerCase().trim(),
         password,
-        role
+        role: userRole
     });
 
     const { accessToken, refreshToken } = await generateAccessandRefreshTokens(newUser._id);

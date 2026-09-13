@@ -43,7 +43,14 @@ export default function LoginPage() {
       }
 
       login(data.user);
-      navigate(data.user.profileCompleted ? "/home" : "/profile");
+      const role = data.user.role;
+      if (role === "admin") {
+        navigate("/admin");
+      } else if (role === "hospital") {
+        navigate("/hospital");
+      } else {
+        navigate(data.user.profileCompleted ? "/home" : "/profile");
+      }
     } catch {
       setError("Unable to connect to server. Please try again later.");
     } finally {

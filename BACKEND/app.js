@@ -11,6 +11,7 @@ const requestRouter = require('./src/routes/requestRouter');
 const donationRouter = require('./src/routes/donationRouter');
 const hospitalRouter = require('./src/routes/hospitalRouter');
 const notificationRouter = require('./src/routes/notificationRouter');
+const { startTimeoutWorker, stopTimeoutWorker } = require('./src/utils/timeoutEscalationWorker');
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
@@ -25,12 +26,15 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(rootDir, 'public')));
 app.use(cookieParser());
 
+const adminRouter = require('./src/routes/adminRouter');
+
 // routes
 app.use('/', userRouter);
 app.use('/', requestRouter);
 app.use('/', donationRouter);
 app.use('/', hospitalRouter);
 app.use('/', notificationRouter);
+app.use('/', adminRouter);
 
 // 404 handler
 app.use((req, res) => {
@@ -49,6 +53,9 @@ app.use((err, req, res, next) => {
 let server;
 connectDB()
   .then(() => {
+    // Start background timeout escalation worker
+    startTimeoutWorker();
+
     server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
     });
@@ -59,7 +66,11 @@ connectDB()
   });
 
 // graceful shutdown
-process.on('SIGINT', () => {
+const handleShutdown = () => {
   console.log('🛑 Shutting down server...');
+  stopTimeoutWorker();
   server?.close(() => process.exit(0));
-});
+};
+
+process.on('SIGINT', handleShutdown);
+process.on('SIGTERM', handleShutdown);

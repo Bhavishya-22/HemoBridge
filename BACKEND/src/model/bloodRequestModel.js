@@ -30,6 +30,8 @@ const bloodRequestSchema = new mongoose.Schema(
         "hospital_approved",
         "waiting_for_donor",
         "donor_accepted",
+        "matched",
+        "no_donors_available",
         "blood_testing",
         "admin_verified",
         "blood_test_scheduled",
@@ -192,23 +194,25 @@ const bloodRequestSchema = new mongoose.Schema(
     },
     receiverConfirmedAt: Date,
 
-    // 🔹 NEW donor queue logic
+    // 🔹 Automatic donor queue logic
     donorQueue: [
       {
         donor: {
           type: mongoose.Schema.Types.ObjectId,
           ref: "User",
         },
+        distanceKm: Number,
         sortedIndex: Number,
         queuedAt: {
           type: Date,
           default: Date.now,
         },
         notificationSentAt: Date,
+        responseDeadline: Date,
         status: {
           type: String,
-          enum: ["pending", "notified", "accepted", "rejected", "timeout"],
-          default: "pending",
+          enum: ["held", "pending", "notified", "accepted", "declined", "rejected", "timeout", "exhausted"],
+          default: "held",
         },
       },
     ],
@@ -217,6 +221,8 @@ const bloodRequestSchema = new mongoose.Schema(
       type: Number,
       default: 0,
     },
+
+    donorResponseDeadline: Date,
 
     allDonorsRejected: {
       type: Boolean,
@@ -248,5 +254,6 @@ bloodRequestSchema.index({ status: 1, createdAt: -1 });
 bloodRequestSchema.index({ requestedBy: 1 });
 bloodRequestSchema.index({ bloodGroup: 1, status: 1 });
 bloodRequestSchema.index({ assignedHospital: 1, status: 1 });
+bloodRequestSchema.index({ status: 1, donorResponseDeadline: 1 });
 
 module.exports = mongoose.model("BloodRequest", bloodRequestSchema);
