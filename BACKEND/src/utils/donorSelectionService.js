@@ -467,10 +467,10 @@ async function _notifyNoDonorsAvailable(request) {
  * @returns {Promise<{ success: boolean, status: string|null, primaryDonorId: string|null, backupsCount: number, message: string }>}
  */
 async function selectNearestAcceptedDonor(requestId) {
-  const request = await BloodRequest.findById(requestId).populate(
-    "acceptedDonors.donor",
-    "fullName phoneNumber location bloodGroup"
-  );
+  const request = await BloodRequest.findById(requestId)
+    .populate("acceptedDonors.donor", "fullName phoneNumber location bloodGroup")
+    .populate("assignedHospital", "fullName hospitalName hospitalAddress hospitalPhone location")
+    .populate("requestedBy", "fullName phoneNumber");
   if (!request) {
     return { success: false, status: null, primaryDonorId: null, backupsCount: 0, message: "Blood request not found" };
   }
@@ -590,14 +590,18 @@ async function selectNearestAcceptedDonor(requestId) {
 
   // ─── Dispatch Notifications ───
   const primaryDonorUser = await User.findById(primaryDonorId).select("fullName phoneNumber bloodGroup");
-  const receiverUser = await User.findById(request.requestedBy).select("fullName");
+  const receiverUser = request.requestedBy || (await User.findById(request.requestedBy).select("fullName phoneNumber"));
+  const hospital = request.assignedHospital;
+  const hospitalName = hospital?.hospitalName || hospital?.fullName || "the assigned hospital";
+  const hospitalAddress = hospital?.hospitalAddress || (hospital?.location?.city ? `${hospital.location.city}, ${hospital.location.state || ""}` : "Hospital address on file");
+  const receiverPhone = receiverUser?.phoneNumber || "Contact via dashboard";
 
   // 1. Primary donor notification
   await Notification.create({
     recipientId: primaryDonorId,
     type: "admin_selected_for_test",
     relatedRequest: request._id,
-    message: `You have been selected as the primary donor for ${receiverUser?.fullName || "the receiver"}'s blood request (${primary.distanceKm} km away). Please proceed to the hospital for testing.`,
+    message: `You've been selected as primary donor for ${receiverUser?.fullName || "the receiver"}'s blood request (${primary.distanceKm} km away). Please report to ${hospitalName}, ${hospitalAddress}. Receiver contact: ${receiverPhone}.`,
     priority: "high",
   });
 
@@ -614,8 +618,9 @@ async function selectNearestAcceptedDonor(requestId) {
   }
 
   // 3. Receiver notification
+  const receiverId = request.requestedBy?._id || request.requestedBy;
   await Notification.create({
-    recipientId: request.requestedBy,
+    recipientId: receiverId,
     type: "donor_accepted",
     relatedRequest: request._id,
     message: `${primaryDonorUser?.fullName || "A donor"} (${primary.distanceKm} km away) has been selected as your primary donor! ${backups.length} backup donor(s) on standby.`,
@@ -624,8 +629,9 @@ async function selectNearestAcceptedDonor(requestId) {
 
   // 4. Hospital notification (if assigned)
   if (request.assignedHospital) {
+    const hospitalId = request.assignedHospital?._id || request.assignedHospital;
     await Notification.create({
-      recipientId: request.assignedHospital,
+      recipientId: hospitalId,
       type: "donor_accepted",
       relatedRequest: request._id,
       message: `Nearest donor ${primaryDonorUser?.fullName || "Donor"} (${primary.distanceKm} km) selected as primary for request ${request._id}. ${backups.length} backup(s) on standby.`,
@@ -799,15 +805,21 @@ async function promoteNearestBackupDonor(requestId, failedDonorId, reason = "Blo
     await request.save();
 
     const promotedUser = await User.findById(promotedDonorId).select("fullName phoneNumber");
-    const receiverUser = await User.findById(request.requestedBy).select("fullName");
+    const receiverUser = await User.findById(request.requestedBy).select("fullName phoneNumber");
     const failedUser = failedIdStr ? await User.findById(failedIdStr).select("fullName") : null;
+    const hospital = request.assignedHospital
+      ? await User.findById(request.assignedHospital).select("fullName hospitalName hospitalAddress hospitalPhone location")
+      : null;
+    const hospitalName = hospital?.hospitalName || hospital?.fullName || "the assigned hospital";
+    const hospitalAddress = hospital?.hospitalAddress || (hospital?.location?.city ? `${hospital.location.city}, ${hospital.location.state || ""}` : "Hospital address on file");
+    const receiverPhone = receiverUser?.phoneNumber || "Contact via dashboard";
 
     // Notify promoted donor
     await Notification.create({
       recipientId: promotedDonorId,
       type: "blood_test_scheduled",
       relatedRequest: request._id,
-      message: `Previous donor's blood test was unsuccessful. You have been promoted as the primary donor for ${receiverUser?.fullName || "the receiver"}. Please proceed to the hospital for testing.`,
+      message: `Previous donor's blood test was unsuccessful. You have been promoted as the primary donor for ${receiverUser?.fullName || "the receiver"}. Please report to ${hospitalName}, ${hospitalAddress}. Receiver contact: ${receiverPhone}.`,
       priority: "high",
     });
 

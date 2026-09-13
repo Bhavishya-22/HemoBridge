@@ -284,7 +284,7 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
 // Updates user profile fields and marks profile as completed.
 // Excludes password and refreshToken from response.
 exports.userUpdateProfile = asyncHandler(async (req, res) => {
-    const { phoneNumber, bloodGroup, age, weight, diseases, location, role } = req.body;
+    const { phoneNumber, bloodGroup, age, weight, height, diseases, location, role } = req.body;
 
     const user = await User.findById(req.user.id);
 
@@ -293,6 +293,7 @@ exports.userUpdateProfile = asyncHandler(async (req, res) => {
         bloodGroup,
         age,
         weight,
+        height,
         diseases,
         profileCompleted: true,
         isVerified: true

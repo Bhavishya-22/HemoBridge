@@ -76,6 +76,12 @@ const userSchema = new mongoose.Schema(
       min: 45, // WHO minimum for donation
     },
 
+    height: {
+      type: Number, // height in cm
+      min: 50,
+      max: 250,
+    },
+
     diseases: {
       type: [String],
       default: [],

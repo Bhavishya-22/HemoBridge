@@ -1,4 +1,4 @@
-﻿/* ======= Dashboard Layout ======= */
+/* ======= Dashboard Layout ======= */
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap");
 
 .dash-page {
@@ -405,4 +405,101 @@
   .dash-nav-label { display: none; }
   .dash-user-block { margin-top: 0; flex: 1; }
   .dash-stats-grid { grid-template-columns: 1fr; }
+}
+
+/* Dashboard Modal Styles */
+.dash-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.dash-modal {
+  background: #13161e;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 480px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.dash-modal-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dash-modal-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #f3f4f6;
+  margin: 0;
+}
+
+.dash-modal-close {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  font-size: 1.5rem;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.dash-modal-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dash-modal-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.dash-field-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #9ca3af;
+  margin-bottom: 0.35rem;
+}
+
+.dash-field-input {
+  width: 100%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.6rem 0.8rem;
+  color: #f3f4f6;
+  font-size: 0.9rem;
+}
+
+.dash-field-input:focus {
+  outline: none;
+  border-color: #ef4444;
+}
+
+.dash-btn.secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e5e7eb;
+}
+
+.dash-btn.schedule {
+  background: #3b82f6;
+  color: #fff;
+}
+.dash-btn.schedule:hover:not(:disabled) {
+  background: #2563eb;
 }

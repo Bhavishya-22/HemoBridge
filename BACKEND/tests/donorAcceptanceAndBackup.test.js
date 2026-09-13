@@ -4,6 +4,7 @@ require("dotenv").config({ path: "./.env" });
 
 const User = require("../src/model/userModel");
 const BloodRequest = require("../src/model/bloodRequestModel");
+const DonationRecord = require("../src/model/donationRecordModel");
 const Notification = require("../src/model/notificationModel");
 const AuditLog = require("../src/model/auditLogModel");
 
@@ -13,7 +14,7 @@ const {
 } = require("../src/utils/donorSelectionService");
 const { REQUEST_STATUSES } = require("../src/utils/stateMachine");
 const acceptController = require("../src/controllers/acceptController");
-const hospitalBloodTestController = require("../src/controllers/hospitalBloodTestController");
+const donationController = require("../src/controllers/donationController");
 
 async function runDonorAcceptanceAndBackupTests() {
   const uri = process.env.TEST_MONGO_URI || process.env.mongoURI || "mongodb://127.0.0.1:27017/blood-bank-test";
@@ -23,6 +24,7 @@ async function runDonorAcceptanceAndBackupTests() {
 
   const cleanupUserIds = [];
   const cleanupRequestIds = [];
+  const cleanupDonationIds = [];
 
   try {
     const testPrefix = `test_acc_${Date.now()}_`;
@@ -258,23 +260,34 @@ async function runDonorAcceptanceAndBackupTests() {
     matchedReq.bloodTestScheduledAt = new Date();
     await matchedReq.save();
 
+    const donationB = await DonationRecord.create({
+      donorId: donorB._id,
+      receiverId: receiver._id,
+      requestId: request._id,
+      hospitalId: hospital._id,
+      status: "pending",
+      verificationStatus: "pending",
+      initiatedAt: new Date(),
+    });
+    cleanupDonationIds.push(donationB._id);
+
     assert.strictEqual(matchedReq.status, REQUEST_STATUSES.BLOOD_TEST_SCHEDULED);
-    console.log("✅ Test 5 Passed: Status is BLOOD_TEST_SCHEDULED.");
+    console.log("✅ Test 5 Passed: Status is BLOOD_TEST_SCHEDULED and pending DonationRecord created.");
 
     // =========================================================================
     // TEST 6: Primary Donor (Donor B, 2km) FAILS Blood Test
     // Requirement:
-    // - Receiver reports failure.
+    // - Hospital verifies blood test as FAILED.
     // - Automatic backup promotion must select Donor C (6km), NOT Donor D (18km).
     // - Distance order must be strictly respected!
     // =========================================================================
     console.log("▶ Test 6: Donor B fails blood test. Verifying automatic promotion of nearest backup (Donor C, 6km)...");
     let mockResFail1 = { statusCode: null, body: null };
-    await hospitalBloodTestController.receiverConfirmFailure(
+    await donationController.verifyDonation(
       {
-        params: { requestId: request._id.toString() },
-        body: { message: "Donor B had low hemoglobin" },
-        user: { id: receiver._id.toString() },
+        params: { donationId: donationB._id.toString() },
+        body: { isVerified: false, verificationNotes: "Donor B had low hemoglobin" },
+        user: { id: hospital._id.toString(), role: "hospital" },
       },
       { status(c) { mockResFail1.statusCode = c; return this; }, json(d) { mockResFail1.body = d; return this; } }
     );
@@ -305,12 +318,19 @@ async function runDonorAcceptanceAndBackupTests() {
     // - Next nearest backup (Donor D, 18km) must be automatically promoted.
     // =========================================================================
     console.log("▶ Test 7: Donor C also fails blood test. Verifying promotion of next backup (Donor D, 18km)...");
+    const donationC = await DonationRecord.findOne({
+      requestId: request._id,
+      donorId: donorC._id,
+      status: "pending",
+    });
+    if (donationC) cleanupDonationIds.push(donationC._id);
+
     let mockResFail2 = { statusCode: null, body: null };
-    await hospitalBloodTestController.receiverConfirmFailure(
+    await donationController.verifyDonation(
       {
-        params: { requestId: request._id.toString() },
-        body: { message: "Donor C had elevated enzymes" },
-        user: { id: receiver._id.toString() },
+        params: { donationId: (donationC?._id || request._id).toString() },
+        body: { isVerified: false, verificationNotes: "Donor C had elevated enzymes" },
+        user: { id: hospital._id.toString(), role: "hospital" },
       },
       { status(c) { mockResFail2.statusCode = c; return this; }, json(d) { mockResFail2.body = d; return this; } }
     );
@@ -333,12 +353,19 @@ async function runDonorAcceptanceAndBackupTests() {
     // - Automatic re-broadcast / search widening must trigger!
     // =========================================================================
     console.log("▶ Test 8: Donor D fails blood test. Verifying automatic exhaustion and re-broadcast flow...");
+    const donationD = await DonationRecord.findOne({
+      requestId: request._id,
+      donorId: donorD._id,
+      status: "pending",
+    });
+    if (donationD) cleanupDonationIds.push(donationD._id);
+
     let mockResFail3 = { statusCode: null, body: null };
-    await hospitalBloodTestController.receiverConfirmFailure(
+    await donationController.verifyDonation(
       {
-        params: { requestId: request._id.toString() },
-        body: { message: "Donor D blood group typing discrepancy" },
-        user: { id: receiver._id.toString() },
+        params: { donationId: (donationD?._id || request._id).toString() },
+        body: { isVerified: false, verificationNotes: "Donor D blood group typing discrepancy" },
+        user: { id: hospital._id.toString(), role: "hospital" },
       },
       { status(c) { mockResFail3.statusCode = c; return this; }, json(d) { mockResFail3.body = d; return this; } }
     );
@@ -395,12 +422,23 @@ async function runDonorAcceptanceAndBackupTests() {
     });
     cleanupRequestIds.push(successRequest._id);
 
+    const donationE = await DonationRecord.create({
+      donorId: donorE._id,
+      receiverId: receiver._id,
+      requestId: successRequest._id,
+      hospitalId: hospital._id,
+      status: "pending",
+      verificationStatus: "pending",
+      initiatedAt: new Date(),
+    });
+    cleanupDonationIds.push(donationE._id);
+
     let mockResSuccess = { statusCode: null, body: null };
-    await hospitalBloodTestController.receiverConfirmSuccess(
+    await donationController.verifyDonation(
       {
-        params: { requestId: successRequest._id.toString() },
-        body: { message: "Everything went great, thank you!" },
-        user: { id: receiver._id.toString() },
+        params: { donationId: donationE._id.toString() },
+        body: { isVerified: true, verificationNotes: "Everything went great, thank you!" },
+        user: { id: hospital._id.toString(), role: "hospital" },
       },
       { status(c) { mockResSuccess.statusCode = c; return this; }, json(d) { mockResSuccess.body = d; return this; } }
     );
@@ -419,10 +457,14 @@ async function runDonorAcceptanceAndBackupTests() {
     console.log("✅ Test 9 Passed: Successful donation transitions to final_completed with thank-you notifications.");
 
     console.log("\n🎉 ALL 9 DONOR ACCEPTANCE & BACKUP PROMOTION TESTS PASSED SUCCESSFULLY! 🎉\n");
+  } catch (err) {
+    console.error("❌ Error during test run:", err);
+    throw err;
   } finally {
     console.log("Cleaning up test documents...");
     await User.deleteMany({ _id: { $in: cleanupUserIds } });
     await BloodRequest.deleteMany({ _id: { $in: cleanupRequestIds } });
+    await DonationRecord.deleteMany({ _id: { $in: cleanupDonationIds } });
     await Notification.deleteMany({ relatedRequest: { $in: cleanupRequestIds } });
     await AuditLog.deleteMany({ requestId: { $in: cleanupRequestIds } });
     await mongoose.disconnect();

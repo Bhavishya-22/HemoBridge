@@ -18,6 +18,7 @@ const EMPTY_FORM = {
   bloodGroup: "",
   age: "",
   weight: "",
+  height: "",
   role: "donor",
   city: "",
   state: "",
@@ -76,6 +77,7 @@ export default function ProfilePage() {
             bloodGroup: data.user.bloodGroup || "",
             age: data.user.age ?? "",
             weight: data.user.weight ?? "",
+            height: data.user.height ?? "",
             role: data.user.role || "donor",
             city: data.user.location?.city || "",
             state: data.user.location?.state || "",
@@ -124,6 +126,7 @@ export default function ProfilePage() {
           bloodGroup,
           age: Number(age),
           weight: Number(weight),
+          height: form.height ? Number(form.height) : undefined,
           role: form.role,
           location: locationPayload,
           diseases: form.diseases
@@ -247,7 +250,7 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Row: Age + Weight */}
+          {/* Row: Age + Weight + Height */}
           <div className="form-row">
             <div className="field-group">
               <label htmlFor="age" className="field-label">
@@ -279,8 +282,25 @@ export default function ProfilePage() {
                 placeholder="e.g. 65"
                 value={form.weight}
                 onChange={handleChange}
-                min={50}
+                min={45}
                 required
+              />
+            </div>
+
+            <div className="field-group">
+              <label htmlFor="height" className="field-label">
+                Height (cm)
+              </label>
+              <input
+                id="height"
+                name="height"
+                type="number"
+                className="field-input"
+                placeholder="e.g. 175"
+                value={form.height}
+                onChange={handleChange}
+                min={50}
+                max={250}
               />
             </div>
           </div>

@@ -4,6 +4,7 @@ const asyncHandler = require("express-async-handler");
 const BloodRequest = require("../model/bloodRequestModel");
 const Notification = require("../model/notificationModel");
 const User = require("../model/userModel");
+const DonationRecord = require("../model/donationRecordModel");
 const AuditLog = require("../model/auditLogModel");
 const { getRecipientsForDonor } = require("../utils/bloodCompatibility");
 const { REQUEST_STATUSES } = require("../utils/stateMachine");
@@ -225,8 +226,8 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
 
   const request = await BloodRequest.findById(requestId)
     .populate("requestedBy", "fullName email phoneNumber location age bloodGroup")
-    .populate("confirmedDonor", "fullName email phoneNumber bloodGroup location")
-    .populate("assignedHospital", "fullName hospitalName hospitalPhone");
+    .populate("confirmedDonor", "fullName email phoneNumber bloodGroup location weight height diseases")
+    .populate("assignedHospital", "fullName hospitalName hospitalAddress hospitalPhone");
 
   if (!request) {
     return res.status(404).json({
@@ -235,10 +236,36 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
     });
   }
 
+  // Authorization check: only requestedBy, confirmedDonor, assignedHospital, or admin can access detail
+  const userId = req.user.id?.toString();
+  const userRole = req.user.role;
+
+  const requestedById = (request.requestedBy?._id || request.requestedBy)?.toString();
+  const confirmedDonorId = (request.confirmedDonor?._id || request.confirmedDonor)?.toString();
+  const assignedHospitalId = (request.assignedHospital?._id || request.assignedHospital)?.toString();
+
+  const isAuthorized =
+    userRole === "admin" ||
+    userId === requestedById ||
+    (confirmedDonorId && userId === confirmedDonorId) ||
+    (assignedHospitalId && userId === assignedHospitalId);
+
+  if (!isAuthorized) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not authorized to view details for this blood request",
+    });
+  }
+
+  const donation = await DonationRecord.findOne({
+    requestId: request._id,
+  }).sort({ createdAt: -1 });
+
   return res.status(200).json({
     success: true,
     data: {
       requestId: request._id,
+      donationId: donation?._id || null,
       receiver: request.requestedBy,
       bloodGroup: request.bloodGroup,
       quantity: request.quantity,

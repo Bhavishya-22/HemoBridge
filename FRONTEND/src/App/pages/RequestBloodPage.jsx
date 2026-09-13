@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { API_BASE } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
 import { formatRequestStatus } from "../../utils/roleAccess";
@@ -20,12 +21,47 @@ const EMPTY_FORM = {
 
 export default function RequestBloodPage() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const deepLinkRequestId = searchParams.get("requestId");
+
   const [form, setForm] = useState(EMPTY_FORM);
   const [coords, setCoords] = useState({ lat: null, lng: null, status: "idle" });
   const [myRequests, setMyRequests] = useState([]);
   const [loadingList, setLoadingList] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+
+  const [detailModalOpen, setDetailModalOpen] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState(null);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const [detailError, setDetailError] = useState("");
+
+  const handleOpenDetails = async (requestId) => {
+    setDetailModalOpen(true);
+    setDetailLoading(true);
+    setDetailError("");
+    try {
+      const res = await fetch(`${API_BASE}/requests/${requestId}/detail`, {
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok && data.data) {
+        setSelectedDetail(data.data);
+      } else {
+        setDetailError(data.message || "Failed to load request details.");
+      }
+    } catch {
+      setDetailError("Unable to connect to server.");
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (deepLinkRequestId) {
+      handleOpenDetails(deepLinkRequestId);
+    }
+  }, [deepLinkRequestId]);
 
   const loadMyRequests = async () => {
     try {
@@ -309,6 +345,17 @@ export default function RequestBloodPage() {
                     <p className="flow-meta">
                       Created {new Date(req.createdAt).toLocaleString()}
                     </p>
+                    {Boolean(matched || ["matched", "blood_test_scheduled", "final_completed"].includes(req.status)) && (
+                      <div className="flow-actions" style={{ marginTop: "0.75rem" }}>
+                        <button
+                          type="button"
+                          className="flow-btn"
+                          onClick={() => handleOpenDetails(req._id)}
+                        >
+                          📋 Details
+                        </button>
+                      </div>
+                    )}
                   </article>
                 );
               })}
@@ -316,6 +363,139 @@ export default function RequestBloodPage() {
           )}
         </section>
       </div>
+
+      {detailModalOpen && (
+        <div className="flow-modal-backdrop" onClick={() => setDetailModalOpen(false)}>
+          <div className="flow-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="flow-modal-header">
+              <h3 className="flow-modal-title">Donor & Request Details</h3>
+              <button
+                className="flow-modal-close"
+                onClick={() => setDetailModalOpen(false)}
+                title="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            <div className="flow-modal-body">
+              {detailLoading ? (
+                <div className="flow-loading" style={{ padding: "2rem" }}>
+                  <span className="flow-spinner" />
+                </div>
+              ) : detailError ? (
+                <div className="flow-alert error">{detailError}</div>
+              ) : selectedDetail ? (
+                <>
+                  <div className="flow-detail-section">
+                    <div className="flow-detail-section-title">🩸 Confirmed Donor Profile</div>
+                    {selectedDetail.confirmedDonor ? (
+                      <>
+                        <div className="flow-detail-row">
+                          <span className="flow-detail-label">Donor Name</span>
+                          <span className="flow-detail-value">{selectedDetail.confirmedDonor.fullName}</span>
+                        </div>
+                        <div className="flow-detail-row">
+                          <span className="flow-detail-label">Contact Phone</span>
+                          <span className="flow-detail-value">
+                            {selectedDetail.confirmedDonor.phoneNumber ? (
+                              <a href={`tel:${selectedDetail.confirmedDonor.phoneNumber}`} style={{ color: "#b91c1c", textDecoration: "underline" }}>
+                                📞 {selectedDetail.confirmedDonor.phoneNumber}
+                              </a>
+                            ) : (
+                              "Not provided"
+                            )}
+                          </span>
+                        </div>
+                        <div className="flow-detail-row">
+                          <span className="flow-detail-label">Blood Group</span>
+                          <span className="flow-badge blood">{selectedDetail.confirmedDonor.bloodGroup}</span>
+                        </div>
+                        <div className="flow-detail-row">
+                          <span className="flow-detail-label">Weight</span>
+                          <span className="flow-detail-value">
+                            {selectedDetail.confirmedDonor.weight ? `${selectedDetail.confirmedDonor.weight} kg` : "—"}
+                          </span>
+                        </div>
+                        <div className="flow-detail-row">
+                          <span className="flow-detail-label">Height</span>
+                          <span className="flow-detail-value">
+                            {selectedDetail.confirmedDonor.height ? `${selectedDetail.confirmedDonor.height} cm` : "—"}
+                          </span>
+                        </div>
+                        <div className="flow-detail-row">
+                          <span className="flow-detail-label">Health Conditions</span>
+                          <span className="flow-detail-value">
+                            {selectedDetail.confirmedDonor.diseases?.length
+                              ? selectedDetail.confirmedDonor.diseases.join(", ")
+                              : "None reported (Clean)"}
+                          </span>
+                        </div>
+                      </>
+                    ) : (
+                      <p className="flow-meta" style={{ padding: "0.5rem 0" }}>
+                        Waiting for donor match.
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flow-detail-section">
+                    <div className="flow-detail-section-title">🏥 Testing Hospital</div>
+                    <div className="flow-detail-row">
+                      <span className="flow-detail-label">Hospital</span>
+                      <span className="flow-detail-value">
+                        {selectedDetail.assignedHospital?.hospitalName ||
+                          selectedDetail.assignedHospital?.fullName ||
+                          "Assigned Hospital"}
+                      </span>
+                    </div>
+                    {selectedDetail.assignedHospital?.hospitalAddress && (
+                      <div className="flow-detail-row">
+                        <span className="flow-detail-label">Address</span>
+                        <span className="flow-detail-value">{selectedDetail.assignedHospital.hospitalAddress}</span>
+                      </div>
+                    )}
+                    {selectedDetail.assignedHospital?.hospitalPhone && (
+                      <div className="flow-detail-row">
+                        <span className="flow-detail-label">Phone</span>
+                        <span className="flow-detail-value">{selectedDetail.assignedHospital.hospitalPhone}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flow-detail-section">
+                    <div className="flow-detail-section-title">📋 Status & Request Info</div>
+                    <div className="flow-detail-row">
+                      <span className="flow-detail-label">Current Status</span>
+                      <span className="flow-badge status">{formatRequestStatus(selectedDetail.status)}</span>
+                    </div>
+                    <div className="flow-detail-row">
+                      <span className="flow-detail-label">Quantity</span>
+                      <span className="flow-detail-value">{selectedDetail.quantity} unit(s)</span>
+                    </div>
+                    <div className="flow-detail-row">
+                      <span className="flow-detail-label">Emergency Level</span>
+                      <span className={`flow-badge emergency-${selectedDetail.emergencyLevel}`}>
+                        {selectedDetail.emergencyLevel}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+            </div>
+
+            <div className="flow-modal-footer">
+              <button
+                type="button"
+                className="flow-btn"
+                onClick={() => setDetailModalOpen(false)}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

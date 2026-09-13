@@ -26,6 +26,7 @@ const donationSchema = new mongoose.Schema(
       type: String,
       enum: [
         "allocated",
+        "pending",
         "donor_accepted",
         "blood_testing",
         "completed",
