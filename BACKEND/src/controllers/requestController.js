@@ -113,7 +113,7 @@ exports.viewRequests = asyncHandler(async (req, res) => {
     bloodGroup: { $in: compatibleRecipientGroups },
     "rejectedDonors.donor": { $ne: donorId },
   })
-    .populate("requestedBy", "fullName location email phoneNumber")
+    .populate("requestedBy", "fullName")
     .populate("assignedHospital", "hospitalName fullName")
     .lean();
 
@@ -167,10 +167,24 @@ exports.viewRequests = asyncHandler(async (req, res) => {
     (a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999)
   );
 
+  // Privacy protection: Only provide exact coordinates for the single nearest request (index 0).
+  // For all other open requests, strip location.coordinates to prevent leaking patient locations.
+  // Sensitive contact info (email, phoneNumber) is also excluded by only populating fullName on requestedBy.
+  const sanitizedRequests = requestsWithDistance.map((reqDoc, index) => {
+    if (index === 0) {
+      return reqDoc;
+    }
+    const { coordinates, ...safeLocation } = reqDoc.location || {};
+    return {
+      ...reqDoc,
+      location: safeLocation,
+    };
+  });
+
   return res.status(200).json({
     success: true,
-    totalRequests: requestsWithDistance.length,
-    requests: requestsWithDistance,
+    totalRequests: sanitizedRequests.length,
+    requests: sanitizedRequests,
   });
 });
 
@@ -182,7 +196,7 @@ exports.myRequests = asyncHandler(async (req, res) => {
   const requests = await BloodRequest.find({
     requestedBy: req.user.id,
   })
-    .populate("confirmedDonor", "fullName email phoneNumber bloodGroup")
+    .populate("confirmedDonor", "fullName email phoneNumber bloodGroup location")
     .populate("assignedHospital", "fullName hospitalName hospitalPhone")
     .sort({ createdAt: -1 });
 

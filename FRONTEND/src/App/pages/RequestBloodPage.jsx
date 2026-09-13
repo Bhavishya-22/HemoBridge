@@ -4,7 +4,27 @@ import { API_BASE } from "../../config/api";
 import { useAuth } from "../../context/AuthContext";
 import { formatRequestStatus } from "../../utils/roleAccess";
 import LocationPickerMap from "../../components/LocationPickerMap";
+import ConfirmedDonorMap from "../../components/ConfirmedDonorMap";
 import "../styles/bloodFlow.css";
+
+function extractCoords(loc) {
+  if (!loc) return null;
+  if (typeof loc.lat === "number" && typeof loc.lng === "number") {
+    return { lat: loc.lat, lng: loc.lng };
+  }
+  if (loc.coordinates) {
+    if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number") {
+      return { lat: loc.coordinates.lat, lng: loc.coordinates.lng };
+    }
+    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2) {
+      return { lat: loc.coordinates.coordinates[1], lng: loc.coordinates.coordinates[0] };
+    }
+    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+      return { lat: loc.coordinates[1], lng: loc.coordinates[0] };
+    }
+  }
+  return null;
+}
 
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const EMERGENCY_LEVELS = ["low", "medium", "high", "critical"];
@@ -323,6 +343,9 @@ export default function RequestBloodPage() {
             <div className="flow-list">
               {myRequests.map((req) => {
                 const matched = req.confirmedDonor || req.selectedDonor;
+                const receiverCoords = extractCoords(req.location) || extractCoords(user?.location);
+                const donorCoords = extractCoords(matched?.location);
+
                 return (
                   <article key={req._id} className="flow-request-item">
                     <div className="flow-request-top">
@@ -345,6 +368,15 @@ export default function RequestBloodPage() {
                     <p className="flow-meta">
                       Created {new Date(req.createdAt).toLocaleString()}
                     </p>
+
+                    {Boolean(matched && receiverCoords && donorCoords) && (
+                      <ConfirmedDonorMap
+                        receiverCoords={receiverCoords}
+                        donorCoords={donorCoords}
+                        height="200px"
+                      />
+                    )}
+
                     {Boolean(matched || ["matched", "blood_test_scheduled", "final_completed"].includes(req.status)) && (
                       <div className="flow-actions" style={{ marginTop: "0.75rem" }}>
                         <button

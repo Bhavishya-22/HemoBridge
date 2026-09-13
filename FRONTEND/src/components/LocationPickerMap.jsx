@@ -198,7 +198,7 @@ export default function LocationPickerMap({
   }, []);
 
   return (
-    <div className="location-picker-map-wrapper" style={{ margin: "1rem 0" }}>
+    <div className="location-picker-map-wrapper" style={{ margin: "1rem 0", position: "relative", zIndex: 1, isolation: "isolate" }}>
       <div
         style={{
           display: "flex",
@@ -236,12 +236,18 @@ export default function LocationPickerMap({
 
       {/* Place search bar */}
       <div style={{ position: "relative", marginBottom: "0.5rem" }}>
-        <form onSubmit={handleSearch} style={{ display: "flex", gap: "0.5rem" }}>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
           <input
             type="text"
             placeholder="Search address, locality, or city (e.g., Banjara Hills, Hyderabad)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                handleSearch(e);
+              }
+            }}
             style={{
               flex: 1,
               padding: "0.45rem 0.75rem",
@@ -251,7 +257,8 @@ export default function LocationPickerMap({
             }}
           />
           <button
-            type="submit"
+            type="button"
+            onClick={handleSearch}
             disabled={searching}
             style={{
               padding: "0.45rem 0.9rem",
@@ -266,7 +273,7 @@ export default function LocationPickerMap({
           >
             {searching ? "Searching..." : "Search"}
           </button>
-        </form>
+        </div>
 
         {/* Search Results Dropdown */}
         {searchResults.length > 0 && (

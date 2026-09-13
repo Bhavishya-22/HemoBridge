@@ -93,6 +93,11 @@ const notificationSchema = new mongoose.Schema(
       enum: ["low", "normal", "high", "critical"],
       default: "normal",
     },
+
+    expiresAt: {
+      type: Date,
+      default: null, // null = never auto-expire (action-required notifications)
+    },
   },
   {
     timestamps: true,
@@ -101,5 +106,6 @@ const notificationSchema = new mongoose.Schema(
 
 notificationSchema.index({ recipientId: 1, createdAt: -1 });
 notificationSchema.index({ recipientId: 1, status: 1 });
+notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 module.exports = mongoose.model("Notification", notificationSchema);

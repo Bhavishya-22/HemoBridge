@@ -6,6 +6,25 @@ import { formatRequestStatus } from "../../utils/roleAccess";
 import DonationRequestsMap from "../../components/DonationRequestsMap";
 import "../styles/bloodFlow.css";
 
+function extractDonorCoords(loc) {
+  if (!loc) return null;
+  if (typeof loc.lat === "number" && typeof loc.lng === "number") {
+    return { lat: loc.lat, lng: loc.lng };
+  }
+  if (loc.coordinates) {
+    if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number") {
+      return { lat: loc.coordinates.lat, lng: loc.coordinates.lng };
+    }
+    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2) {
+      return { lat: loc.coordinates.coordinates[1], lng: loc.coordinates.coordinates[0] };
+    }
+    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+      return { lat: loc.coordinates[1], lng: loc.coordinates[0] };
+    }
+  }
+  return null;
+}
+
 export default function DonateBloodPage() {
   const { user } = useAuth();
   const userId = user?.id || user?._id;
@@ -175,16 +194,7 @@ export default function DonateBloodPage() {
             <h2>Open requests near you</h2>
             {openRequests.length > 0 && (
               <DonationRequestsMap
-                donorCoords={
-                  user?.location?.coordinates?.lat
-                    ? { lat: user.location.coordinates.lat, lng: user.location.coordinates.lng }
-                    : Array.isArray(user?.location?.coordinates?.coordinates)
-                    ? {
-                        lat: user.location.coordinates.coordinates[1],
-                        lng: user.location.coordinates.coordinates[0],
-                      }
-                    : null
-                }
+                donorCoords={extractDonorCoords(user?.location)}
                 requests={openRequests}
                 onAccept={handleAccept}
                 busyId={busyId}

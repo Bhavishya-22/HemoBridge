@@ -30,11 +30,10 @@ exports.viewNotifications = asyncHandler(async (req, res) => {
 exports.markAsRead = asyncHandler(async (req, res) => {
     const { notificationId } = req.params;
 
-    const notification = await Notification.findByIdAndUpdate(
-        notificationId,
-        { status: "read" },
-        { new: true }
-    );
+    const notification = await Notification.findOneAndDelete({
+        _id: notificationId,
+        recipientId: req.user.id, // security: users can only delete their own
+    });
 
     if (!notification) {
         return res.status(404).json({
@@ -45,20 +44,19 @@ exports.markAsRead = asyncHandler(async (req, res) => {
 
     res.status(200).json({
         success: true,
-        message: "Notification marked as read",
-        notification,
+        message: "Notification read and removed",
     });
 });
 
 exports.markAllAsRead = asyncHandler(async (req, res) => {
-    await Notification.updateMany(
-        { recipientId: req.user.id, status: { $ne: "read" } },
-        { status: "read" }
-    );
+    await Notification.deleteMany({
+        recipientId: req.user.id,
+        status: { $ne: "read" },
+    });
 
     res.status(200).json({
         success: true,
-        message: "All notifications marked as read",
+        message: "All notifications read and removed",
     });
 });
 

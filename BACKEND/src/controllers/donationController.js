@@ -172,6 +172,8 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
             availabilityStatus: "available",
         });
 
+        const terminalExpiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
         // 1. Thank you to confirmed donor
         await Notification.create({
             recipientId: donation.donorId,
@@ -180,6 +182,7 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
             relatedDonation: donation._id,
             message: `🎉 Thank you, ${request?.confirmedDonor?.fullName || "Donor"}! Your blood donation has been verified by the hospital. You saved a life! - ${request?.requestedBy?.fullName || "Receiver"}`,
             priority: "high",
+            expiresAt: terminalExpiresAt,
         });
 
         // 2. Notify receiver
@@ -190,6 +193,7 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
             relatedDonation: donation._id,
             message: `A suitable blood donor (${request?.confirmedDonor?.fullName || "Donor"}) has been verified by the hospital and your blood request is now completed!`,
             priority: "high",
+            expiresAt: terminalExpiresAt,
         });
 
         // 3. Thank you to standby / backup donors
@@ -208,6 +212,7 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
                 type: "donor_not_selected_thanks",
                 relatedRequest: donation.requestId,
                 message: "Thank you for accepting to help! Blood donation has been completed with the primary donor. We appreciate your readiness to save a life!",
+                expiresAt: terminalExpiresAt,
             });
         }
 
@@ -221,6 +226,7 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
                         type: "donor_rejection_thanks",
                         relatedRequest: donation.requestId,
                         message: "Thank you for considering to help! Donation is now complete. We hope to see you in future drives.",
+                        expiresAt: terminalExpiresAt,
                     });
                 }
             }

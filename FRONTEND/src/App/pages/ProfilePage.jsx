@@ -23,6 +23,10 @@ const EMPTY_FORM = {
   city: "",
   state: "",
   diseases: "",
+  hospitalName: "",
+  registrationNumber: "",
+  hospitalAddress: "",
+  hospitalPhone: "",
 };
 
 export default function ProfilePage() {
@@ -82,6 +86,10 @@ export default function ProfilePage() {
             city: data.user.location?.city || "",
             state: data.user.location?.state || "",
             diseases: data.user.diseases?.join(", ") || "",
+            hospitalName: data.user.hospitalName || "",
+            registrationNumber: data.user.registrationNumber || "",
+            hospitalAddress: data.user.hospitalAddress || "",
+            hospitalPhone: data.user.hospitalPhone || "",
           });
         }
       } catch (err) {
@@ -101,38 +109,61 @@ export default function ProfilePage() {
     e.preventDefault();
     setError("");
 
-    const { phoneNumber, bloodGroup, age, weight, city, state } = form;
-    if (!phoneNumber || !bloodGroup || !age || !weight || !city || !state) {
-      setError("Please fill in all required fields.");
-      return;
+    const isHospital = form.role === "hospital";
+
+    if (isHospital) {
+      const { phoneNumber, hospitalName, registrationNumber, hospitalAddress, hospitalPhone } = form;
+      if (!phoneNumber || !hospitalName || !registrationNumber || !hospitalAddress || !hospitalPhone) {
+        setError("Please fill in all hospital details.");
+        return;
+      }
+    } else {
+      const { phoneNumber, bloodGroup, age, weight, city, state } = form;
+      if (!phoneNumber || !bloodGroup || !age || !weight || !city || !state) {
+        setError("Please fill in all required fields.");
+        return;
+      }
     }
 
     setLoading(true);
     try {
-      const locationPayload = {
-        city,
-        state,
-        ...(coords.lat != null && coords.lng != null
-          ? { coordinates: { lat: coords.lat, lng: coords.lng } }
-          : {}),
-      };
+      let bodyPayload = {};
+      if (isHospital) {
+        bodyPayload = {
+          role: "hospital",
+          phoneNumber: form.phoneNumber,
+          hospitalName: form.hospitalName,
+          registrationNumber: form.registrationNumber,
+          hospitalAddress: form.hospitalAddress,
+          hospitalPhone: form.hospitalPhone,
+        };
+      } else {
+        const locationPayload = {
+          city: form.city,
+          state: form.state,
+          ...(coords.lat != null && coords.lng != null
+            ? { coordinates: { lat: coords.lat, lng: coords.lng } }
+            : {}),
+        };
+        bodyPayload = {
+          role: form.role,
+          phoneNumber: form.phoneNumber,
+          bloodGroup: form.bloodGroup,
+          age: Number(form.age),
+          weight: Number(form.weight),
+          height: form.height ? Number(form.height) : undefined,
+          location: locationPayload,
+          diseases: form.diseases
+            ? form.diseases.split(",").map((d) => d.trim()).filter(Boolean)
+            : [],
+        };
+      }
 
       const res = await fetch(`${API_BASE}/user/update-profile`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phoneNumber,
-          bloodGroup,
-          age: Number(age),
-          weight: Number(weight),
-          height: form.height ? Number(form.height) : undefined,
-          role: form.role,
-          location: locationPayload,
-          diseases: form.diseases
-            ? form.diseases.split(",").map((d) => d.trim()).filter(Boolean)
-            : [],
-        }),
+        body: JSON.stringify(bodyPayload),
       });
 
       const data = await res.json();
@@ -212,175 +243,265 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          {/* Row: Blood Group + Phone */}
-          <div className="form-row">
-            <div className="field-group">
-              <label htmlFor="bloodGroup" className="field-label">
-                Blood group <span className="required">*</span>
-              </label>
-              <select
-                id="bloodGroup"
-                name="bloodGroup"
-                className="field-input"
-                value={form.bloodGroup}
-                onChange={handleChange}
-                required
-              >
-                <option value="">Select</option>
-                {BLOOD_GROUPS.map((g) => (
-                  <option key={g} value={g}>{g}</option>
-                ))}
-              </select>
-            </div>
+          {/* Hospital-Specific Fields */}
+          {form.role === "hospital" ? (
+            <>
+              <div className="field-group full">
+                <label htmlFor="phoneNumber" className="field-label">
+                  Contact Phone Number <span className="required">*</span>
+                </label>
+                <input
+                  id="phoneNumber"
+                  name="phoneNumber"
+                  type="tel"
+                  className="field-input"
+                  placeholder="+91 98765 43210"
+                  value={form.phoneNumber}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
 
-            <div className="field-group">
-              <label htmlFor="phoneNumber" className="field-label">
-                Phone number <span className="required">*</span>
-              </label>
-              <input
-                id="phoneNumber"
-                name="phoneNumber"
-                type="tel"
-                className="field-input"
-                placeholder="+91 98765 43210"
-                value={form.phoneNumber}
-                onChange={handleChange}
-                required
+              <div className="form-row">
+                <div className="field-group">
+                  <label htmlFor="hospitalName" className="field-label">
+                    Hospital Name <span className="required">*</span>
+                  </label>
+                  <input
+                    id="hospitalName"
+                    name="hospitalName"
+                    type="text"
+                    className="field-input"
+                    placeholder="e.g. Apollo Hospitals"
+                    value={form.hospitalName}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="registrationNumber" className="field-label">
+                    Registration Number <span className="required">*</span>
+                  </label>
+                  <input
+                    id="registrationNumber"
+                    name="registrationNumber"
+                    type="text"
+                    className="field-input"
+                    placeholder="e.g. HOSP-12345"
+                    value={form.registrationNumber}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="field-group full">
+                <label htmlFor="hospitalAddress" className="field-label">
+                  Hospital Address <span className="required">*</span>
+                </label>
+                <input
+                  id="hospitalAddress"
+                  name="hospitalAddress"
+                  type="text"
+                  className="field-input"
+                  placeholder="e.g. Road No 2, Banjara Hills, Hyderabad"
+                  value={form.hospitalAddress}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="field-group full">
+                <label htmlFor="hospitalPhone" className="field-label">
+                  Official Hospital Phone / Helpdesk <span className="required">*</span>
+                </label>
+                <input
+                  id="hospitalPhone"
+                  name="hospitalPhone"
+                  type="tel"
+                  className="field-input"
+                  placeholder="e.g. 040-23456789"
+                  value={form.hospitalPhone}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </>
+          ) : (
+            /* Donor and Receiver Fields */
+            <>
+              {/* Row: Blood Group + Phone */}
+              <div className="form-row">
+                <div className="field-group">
+                  <label htmlFor="bloodGroup" className="field-label">
+                    Blood group <span className="required">*</span>
+                  </label>
+                  <select
+                    id="bloodGroup"
+                    name="bloodGroup"
+                    className="field-input"
+                    value={form.bloodGroup}
+                    onChange={handleChange}
+                    required
+                  >
+                    <option value="">Select</option>
+                    {BLOOD_GROUPS.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="phoneNumber" className="field-label">
+                    Phone number <span className="required">*</span>
+                  </label>
+                  <input
+                    id="phoneNumber"
+                    name="phoneNumber"
+                    type="tel"
+                    className="field-input"
+                    placeholder="+91 98765 43210"
+                    value={form.phoneNumber}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
+
+              {/* Row: Age + Weight + Height */}
+              <div className="form-row">
+                <div className="field-group">
+                  <label htmlFor="age" className="field-label">
+                    Age <span className="required">*</span>
+                  </label>
+                  <input
+                    id="age"
+                    name="age"
+                    type="number"
+                    className="field-input"
+                    placeholder="e.g. 22"
+                    value={form.age}
+                    onChange={handleChange}
+                    min={18}
+                    max={65}
+                    required
+                  />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="weight" className="field-label">
+                    Weight (kg) <span className="required">*</span>
+                  </label>
+                  <input
+                    id="weight"
+                    name="weight"
+                    type="number"
+                    className="field-input"
+                    placeholder="e.g. 65"
+                    value={form.weight}
+                    onChange={handleChange}
+                    min={45}
+                    required
+                  />
+                </div>
+
+                <div className="field-group">
+                  <label htmlFor="height" className="field-label">
+                    Height (cm)
+                  </label>
+                  <input
+                    id="height"
+                    name="height"
+                    type="number"
+                    className="field-input"
+                    placeholder="e.g. 175"
+                    value={form.height}
+                    onChange={handleChange}
+                    min={50}
+                    max={250}
+                  />
+                </div>
+              </div>
+
+              <LocationPickerMap
+                initialLat={coords.lat}
+                initialLng={coords.lng}
+                onLocationChange={({ lat, lng, city, state }) => {
+                  setCoords({ lat, lng, status: "granted" });
+                  setForm((prev) => ({
+                    ...prev,
+                    city: city || prev.city,
+                    state: state || prev.state,
+                  }));
+                }}
+                label="Your Location (Map)"
+                height="260px"
               />
-            </div>
-          </div>
 
-          {/* Row: Age + Weight + Height */}
-          <div className="form-row">
-            <div className="field-group">
-              <label htmlFor="age" className="field-label">
-                Age <span className="required">*</span>
-              </label>
-              <input
-                id="age"
-                name="age"
-                type="number"
-                className="field-input"
-                placeholder="e.g. 22"
-                value={form.age}
-                onChange={handleChange}
-                min={18}
-                max={65}
-                required
-              />
-            </div>
+              {/* Row: City + State */}
+              <div className="form-row">
+                <div className="field-group">
+                  <label htmlFor="city" className="field-label">
+                    City <span className="required">*</span>
+                  </label>
+                  <input
+                    id="city"
+                    name="city"
+                    type="text"
+                    className="field-input"
+                    placeholder="Hyderabad"
+                    value={form.city}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
 
-            <div className="field-group">
-              <label htmlFor="weight" className="field-label">
-                Weight (kg) <span className="required">*</span>
-              </label>
-              <input
-                id="weight"
-                name="weight"
-                type="number"
-                className="field-input"
-                placeholder="e.g. 65"
-                value={form.weight}
-                onChange={handleChange}
-                min={45}
-                required
-              />
-            </div>
+                <div className="field-group">
+                  <label htmlFor="state" className="field-label">
+                    State <span className="required">*</span>
+                  </label>
+                  <input
+                    id="state"
+                    name="state"
+                    type="text"
+                    className="field-input"
+                    placeholder="Telangana"
+                    value={form.state}
+                    onChange={handleChange}
+                    required
+                  />
+                </div>
+              </div>
 
-            <div className="field-group">
-              <label htmlFor="height" className="field-label">
-                Height (cm)
-              </label>
-              <input
-                id="height"
-                name="height"
-                type="number"
-                className="field-input"
-                placeholder="e.g. 175"
-                value={form.height}
-                onChange={handleChange}
-                min={50}
-                max={250}
-              />
-            </div>
-          </div>
+              <div style={{ fontSize: "0.85rem", marginTop: "-0.5rem", marginBottom: "0.75rem", color: "#64748b" }}>
+                {coords.status === "acquiring" && "🔵 Detecting your location..."}
+                {coords.status === "granted" && `🟢 Exact Location Captured: ${coords.lat?.toFixed(4)}°, ${coords.lng?.toFixed(4)}°`}
+                {coords.status === "denied" && "🟡 Location access denied — map pin will be used."}
+                {coords.status === "unavailable" && "🟡 Geolocation unavailable — map pin will be used."}
+              </div>
 
-          <LocationPickerMap
-            initialLat={coords.lat}
-            initialLng={coords.lng}
-            onLocationChange={({ lat, lng, city, state }) => {
-              setCoords({ lat, lng, status: "granted" });
-              setForm((prev) => ({
-                ...prev,
-                city: city || prev.city,
-                state: state || prev.state,
-              }));
-            }}
-            label="Your Location (Map)"
-            height="260px"
-          />
-
-          {/* Row: City + State */}
-          <div className="form-row">
-            <div className="field-group">
-              <label htmlFor="city" className="field-label">
-                City <span className="required">*</span>
-              </label>
-              <input
-                id="city"
-                name="city"
-                type="text"
-                className="field-input"
-                placeholder="Hyderabad"
-                value={form.city}
-                onChange={handleChange}
-                required
-              />
-            </div>
-
-            <div className="field-group">
-              <label htmlFor="state" className="field-label">
-                State <span className="required">*</span>
-              </label>
-              <input
-                id="state"
-                name="state"
-                type="text"
-                className="field-input"
-                placeholder="Telangana"
-                value={form.state}
-                onChange={handleChange}
-                required
-              />
-            </div>
-          </div>
-
-          <div style={{ fontSize: "0.85rem", marginTop: "-0.5rem", marginBottom: "0.75rem", color: "#64748b" }}>
-            {coords.status === "acquiring" && "🔵 Detecting your location..."}
-            {coords.status === "granted" && `🟢 Exact Location Captured: ${coords.lat?.toFixed(4)}°, ${coords.lng?.toFixed(4)}°`}
-            {coords.status === "denied" && "🟡 Location access denied — map pin will be used."}
-            {coords.status === "unavailable" && "🟡 Geolocation unavailable — map pin will be used."}
-          </div>
-
-          {/* Diseases — optional */}
-          <div className="field-group full">
-            <label htmlFor="diseases" className="field-label">
-              Any medical conditions{" "}
-              <span className="field-optional">(optional)</span>
-            </label>
-            <input
-              id="diseases"
-              name="diseases"
-              type="text"
-              className="field-input"
-              placeholder="e.g. Diabetes, Hypertension — comma separated"
-              value={form.diseases}
-              onChange={handleChange}
-            />
-            <span className="field-hint">
-              Leave blank if none. Separate multiple conditions with a comma.
-            </span>
-          </div>
+              {/* Diseases — optional */}
+              <div className="field-group full">
+                <label htmlFor="diseases" className="field-label">
+                  Any medical conditions{" "}
+                  <span className="field-optional">(optional)</span>
+                </label>
+                <input
+                  id="diseases"
+                  name="diseases"
+                  type="text"
+                  className="field-input"
+                  placeholder="e.g. Diabetes, Hypertension — comma separated"
+                  value={form.diseases}
+                  onChange={handleChange}
+                />
+                <span className="field-hint">
+                  Leave blank if none. Separate multiple conditions with a comma.
+                </span>
+              </div>
+            </>
+          )}
 
           <button type="submit" className="profile-btn" disabled={loading}>
             {loading ? <span className="profile-spinner"></span> : "Save profile →"}

@@ -99,14 +99,6 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  // Check collection window deadline if already set
-  if (existing.donorSelectionDeadline && existing.donorSelectionDeadline < now) {
-    return res.status(410).json({
-      success: false,
-      message: "The donor selection window for this request has already closed.",
-    });
-  }
-
   const collectionWindowMs = parseInt(process.env.DONOR_COLLECTION_WINDOW_MS, 10) || DEFAULT_COLLECTION_WINDOW_MS;
   const computedDeadline = new Date(
     Math.min(
@@ -122,11 +114,6 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
       status: REQUEST_STATUSES.WAITING_FOR_DONOR,
       "acceptedDonors.donor": { $ne: donorObjId }, // prevent duplicate acceptance
       "rejectedDonors.donor": { $ne: donorObjId }, // must not have declined
-      $or: [
-        { donorSelectionDeadline: null },
-        { donorSelectionDeadline: { $exists: false } },
-        { donorSelectionDeadline: { $gte: now } },
-      ],
       $and: [
         {
           $or: [
@@ -275,33 +262,15 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
     note: `Donor ${donor?.fullName || donorId} accepted (${distanceKm} km). Added to acceptance pool.`,
   });
 
-  // ── Early selection check: if all candidatePool members have responded (accepted or declined) ──
-  const totalPoolCandidates = (updatedRequest.candidatePool || []).length;
-  const totalResponses = (updatedRequest.acceptedDonors || []).length + (updatedRequest.rejectedDonors || []).length;
+  // Immediately route to hospital on first acceptance
+  await selectNearestAcceptedDonor(updatedRequest._id);
 
-  if (totalPoolCandidates > 0 && totalResponses >= totalPoolCandidates) {
-    // All candidates have responded; trigger selection immediately without waiting
-    await selectNearestAcceptedDonor(updatedRequest._id);
-  } else {
-    // Schedule in-process fallback timer to run selection as soon as donorSelectionDeadline expires
-    const delayMs = updatedRequest.donorSelectionDeadline.getTime() - Date.now();
-    if (delayMs > 0 && delayMs <= 10 * 60 * 1000) {
-      setTimeout(() => {
-        selectNearestAcceptedDonor(updatedRequest._id).catch((err) => {
-          console.error(`[SelectionTimer] Error executing selection for request ${updatedRequest._id}:`, err.message);
-        });
-      }, delayMs);
-    }
-  }
-
-  // Reload request to return current state (might have transitioned to matched if early selection triggered)
+  // Reload request to return current state
   const currentReq = await BloodRequest.findById(requestId);
 
   return res.status(200).json({
     success: true,
-    message: currentReq.status === REQUEST_STATUSES.MATCHED
-      ? "Request accepted successfully. Selection completed and nearest donor matched."
-      : "Request accepted successfully. Selection window is open for nearby donors.",
+    message: "Donor matched and routed to hospital immediately.",
     data: {
       requestId: currentReq._id,
       status: currentReq.status,

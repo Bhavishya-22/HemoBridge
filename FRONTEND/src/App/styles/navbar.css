@@ -1,6 +1,6 @@
 /* ── NAVBAR ── */
   .nav {
-    position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
     background: rgba(255,255,255,0.95);
     backdrop-filter: blur(12px);
     border-bottom: 1px solid var(--border);
@@ -105,7 +105,7 @@
   border: 1px solid #e2e8f0;
   border-radius: 16px;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(185, 28, 28, 0.08);
-  z-index: 500;
+  z-index: 10000;
   overflow: hidden;
   animation: notif-fade-in 0.18s ease-out;
 }

@@ -12,6 +12,7 @@ const donationRouter = require('./src/routes/donationRouter');
 const hospitalRouter = require('./src/routes/hospitalRouter');
 const notificationRouter = require('./src/routes/notificationRouter');
 const { startTimeoutWorker, stopTimeoutWorker } = require('./src/utils/timeoutEscalationWorker');
+const ensureAdminUser = require('./src/utils/ensureAdminUser');
 
 const PORT = process.env.PORT || 3000;
 const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN || 'http://localhost:5173,http://localhost:5174')
@@ -70,7 +71,10 @@ app.use((err, req, res, next) => {
 // mongodb connection and server start
 let server;
 connectDB()
-  .then(() => {
+  .then(async () => {
+    // Ensure default system administrator exists in database
+    await ensureAdminUser();
+
     // Start background timeout escalation worker
     startTimeoutWorker();
 

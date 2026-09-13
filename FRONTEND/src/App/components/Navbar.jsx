@@ -87,22 +87,18 @@ function NotificationBell({ user }) {
       method: "PATCH",
       credentials: "include",
     });
-    setNotifications((prev) => prev.map((n) => ({ ...n, status: "read" })));
+    setNotifications([]);
     setUnreadCount(0);
   };
 
   const handleClickNotification = async (n) => {
-    // Mark as read
-    if (n.status !== "read") {
-      await fetch(`${API_BASE}/notifications/${n.id}/read`, {
-        method: "PATCH",
-        credentials: "include",
-      });
-      setNotifications((prev) =>
-        prev.map((item) => (item.id === n.id ? { ...item, status: "read" } : item))
-      );
-      setUnreadCount((c) => Math.max(0, c - 1));
-    }
+    // Mark as read (deleted from DB)
+    await fetch(`${API_BASE}/notifications/${n.id}/read`, {
+      method: "PATCH",
+      credentials: "include",
+    });
+    setNotifications((prev) => prev.filter((item) => item.id !== n.id));
+    setUnreadCount((c) => Math.max(0, c - 1));
 
     const link = getDeepLink(n, user?.role);
     if (link) {

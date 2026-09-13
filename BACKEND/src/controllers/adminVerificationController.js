@@ -236,8 +236,9 @@ exports.adminVerifyHospital = asyncHandler(async (req, res) => {
 // Admin dashboard: get ALL blood requests
 exports.getAllRequests = asyncHandler(async (req, res) => {
     const requests = await BloodRequest.find({})
-        .populate("requestedBy", "fullName email")
-        .populate("assignedHospital", "hospitalName fullName")
+        .populate("requestedBy", "fullName")
+        .populate("assignedHospital", "hospitalName fullName hospitalPhone hospitalAddress")
+        .populate("confirmedDonor", "fullName bloodGroup")
         .sort({ createdAt: -1 })
         .limit(100);
 
