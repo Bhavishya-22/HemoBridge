@@ -14,17 +14,35 @@ const notificationRouter = require('./src/routes/notificationRouter');
 const { startTimeoutWorker, stopTimeoutWorker } = require('./src/utils/timeoutEscalationWorker');
 
 const PORT = process.env.PORT || 3000;
-const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'http://localhost:5173';
+const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN || 'http://localhost:5173,http://localhost:5174')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
 
 const rootDir = path.resolve();
 const app = express();
 
 // middlewares
-app.use(cors({ origin: CLIENT_ORIGIN, credentials: true }));
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || CLIENT_ORIGINS.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error(`Origin ${origin} not allowed by CORS`));
+      }
+    },
+    credentials: true,
+  })
+);
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(rootDir, 'public')));
 app.use(cookieParser());
+
+app.get('/health', (req, res) => {
+  res.status(200).json({ ok: true, service: 'blood-bank-api' });
+});
 
 const adminRouter = require('./src/routes/adminRouter');
 
@@ -58,6 +76,19 @@ connectDB()
 
     server = app.listen(PORT, () => {
       console.log(`🚀 Server is running on http://localhost:${PORT}`);
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(
+          `❌ Port ${PORT} is already in use. Stop the other process or set PORT in .env.\n` +
+            `   Windows: netstat -ano | findstr :${PORT}  then  taskkill /PID <pid> /F`
+        );
+      } else {
+        console.error('❌ Server failed to start:', err);
+      }
+      stopTimeoutWorker();
+      process.exit(1);
     });
   })
   .catch((error) => {

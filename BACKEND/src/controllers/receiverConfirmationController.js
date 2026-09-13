@@ -1,3 +1,9 @@
+/**
+ * @deprecated This controller is superseded by hospitalBloodTestController.receiverConfirmSuccess
+ * and receiverConfirmFailure. It references a non-existent status "completed" and is not wired
+ * to any route. Do not use.
+ */
+
 const mongoose = require("mongoose");
 const BloodRequest = require("../model/bloodRequestModel");
 const Notification = require("../model/notificationModel");
@@ -17,10 +23,9 @@ exports.sendReceiverConfirmation = asyncHandler(async (req, res) => {
     }
 
     const request = await BloodRequest.findById(requestId)
-        .populate("selectedDonor", "fullName")
+        .populate("confirmedDonor", "fullName")
         .populate("acceptedDonors.donor", "fullName")
-        .populate("rejectedDonors.donor", "fullName")
-        .populate("backupDonorsOnHold.donor", "fullName");
+        .populate("rejectedDonors.donor", "fullName");
 
     if (!request) {
         return res.status(404).json({
@@ -29,15 +34,13 @@ exports.sendReceiverConfirmation = asyncHandler(async (req, res) => {
         });
     }
 
-    // NEW: Can only send thank you after donation is completed
-    if (request.status !== "completed") {
+    if (request.status !== "final_completed") {
         return res.status(400).json({
             success: false,
             message: "Donation must be completed before sending final thank you. Current status: " + request.status,
         });
     }
 
-    // NEW: Check if blood test was confirmed as successful by receiver
     if (!request.receiverBloodTestConfirmation || request.receiverBloodTestConfirmation.status !== "success") {
         return res.status(400).json({
             success: false,
@@ -53,7 +56,6 @@ exports.sendReceiverConfirmation = asyncHandler(async (req, res) => {
         });
     }
 
-    // Record confirmation
     request.receiverConfirmation = {
         confirmedBy: receiverId,
         confirmationMessage: confirmationMessage || "Thank you for saving my life!",
@@ -68,51 +70,14 @@ exports.sendReceiverConfirmation = asyncHandler(async (req, res) => {
 
     const thankYouMessage = confirmationMessage || "Thank you for saving my life!";
 
-    // Send thank you to selected donor
-    await Notification.create({
-        recipientId: request.selectedDonor._id,
-        type: "receiver_thank_you",
-        relatedRequest: request._id,
-        message: `${thankYouMessage} - ${request.requestedBy.fullName}`,
-        priority: "high",
-    });
-
-    // Send thank you to backup donors
-    if (request.backupDonorsOnHold && request.backupDonorsOnHold.length > 0) {
-        for (const backupDonor of request.backupDonorsOnHold) {
-            await Notification.create({
-                recipientId: backupDonor.donor._id,
-                type: "receiver_thank_you_backup",
-                relatedRequest: request._id,
-                message: `Thank you from receiver: ${thankYouMessage} - ${request.requestedBy.fullName}`,
-            });
-        }
-    }
-
-    // Send thank you to accepted but not selected donors
-    const notSelectedAccepted = request.acceptedDonors.filter(
-        (item) => item.donor._id.toString() !== request.selectedDonor.toString()
-    );
-
-    for (const donorItem of notSelectedAccepted) {
+    if (request.confirmedDonor) {
         await Notification.create({
-            recipientId: donorItem.donor._id,
-            type: "receiver_thank_you_accepted",
+            recipientId: request.confirmedDonor._id || request.confirmedDonor,
+            type: "receiver_thank_you",
             relatedRequest: request._id,
-            message: `From the receiver: ${thankYouMessage} - ${request.requestedBy.fullName}`,
+            message: `${thankYouMessage} - ${request.requestedBy.fullName || "Receiver"}`,
+            priority: "high",
         });
-    }
-
-    // Send thank you to rejected donors
-    if (request.rejectedDonors && request.rejectedDonors.length > 0) {
-        for (const rejectedDonor of request.rejectedDonors) {
-            await Notification.create({
-                recipientId: rejectedDonor.donor,
-                type: "receiver_thank_you_all",
-                relatedRequest: request._id,
-                message: `From the receiver: ${thankYouMessage} - ${request.requestedBy.fullName}`,
-            });
-        }
     }
 
     return res.status(200).json({
@@ -122,12 +87,6 @@ exports.sendReceiverConfirmation = asyncHandler(async (req, res) => {
             requestId: request._id,
             status: request.status,
             receiverMessage: thankYouMessage,
-            notificationsSent: {
-                selectedDonor: 1,
-                backupDonors: request.backupDonorsOnHold?.length || 0,
-                acceptedDonors: notSelectedAccepted.length,
-                rejectedDonors: request.rejectedDonors?.length || 0,
-            },
         },
     });
 });

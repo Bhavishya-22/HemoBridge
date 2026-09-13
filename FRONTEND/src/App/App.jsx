@@ -12,6 +12,7 @@ import LoginPage from "./pages/LoginPage";
 import SignUpPage from "./pages/SignUpPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import HospitalDashboard from "./pages/HospitalDashboard";
+import RoleRoute, { RequireAuth } from "../components/RoleRoute";
 
 // Routes where the global Navbar should be hidden (they have their own sidebar)
 const DASHBOARD_PATHS = ["/admin", "/hospital"];
@@ -27,14 +28,49 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/home" element={<Home />} />
-        <Route path="/request" element={<RequestBloodPage />} />
-        <Route path="/donate" element={<DonateBloodPage />} />
+        <Route
+          path="/request"
+          element={
+            <RoleRoute allowedRoles={["receiver"]}>
+              <RequestBloodPage />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/donate"
+          element={
+            <RoleRoute allowedRoles={["donor"]}>
+              <DonateBloodPage />
+            </RoleRoute>
+          }
+        />
         <Route path="/faq" element={<FAQPage />} />
-        <Route path="/profile" element={<ProfilePage />} />
+        <Route
+          path="/profile"
+          element={
+            <RequireAuth>
+              <ProfilePage />
+            </RequireAuth>
+          }
+        />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignUpPage />} />
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/hospital" element={<HospitalDashboard />} />
+        <Route
+          path="/admin"
+          element={
+            <RoleRoute allowedRoles={["admin"]} requireProfile={false}>
+              <AdminDashboard />
+            </RoleRoute>
+          }
+        />
+        <Route
+          path="/hospital"
+          element={
+            <RoleRoute allowedRoles={["hospital"]} requireProfile={false}>
+              <HospitalDashboard />
+            </RoleRoute>
+          }
+        />
       </Routes>
     </>
   );

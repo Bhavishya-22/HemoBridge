@@ -4,17 +4,27 @@ const asyncHandler = require("express-async-handler");
 const BloodRequest = require("../model/bloodRequestModel");
 const Notification = require("../model/notificationModel");
 const User = require("../model/userModel");
-const { REQUEST_STATUSES, validateTransition } = require("../utils/stateMachine");
+const { REQUEST_STATUSES } = require("../utils/stateMachine");
 const {
-  escalateToNextDonor,
-  notifyHeldDonorsFulfilled,
+  selectNearestAcceptedDonor,
+  calculateHaversineDistanceKm,
+  parseCoordinates,
 } = require("../utils/donorSelectionService");
+const { isBloodCompatible } = require("../utils/bloodCompatibility");
 const { logAuditEvent } = require("../utils/auditLogger");
 
 /**
- * STEP 5: Donor accepts the blood request.
- * Fix Flaw 1: Solves race conditions via atomic findOneAndUpdate with state & donor precondition filters.
- * Marks request as "matched", notifies receiver, hospital, and fulfills/clears other held donors.
+ * Default collection window in milliseconds (3 minutes default, configurable via env).
+ */
+const DEFAULT_COLLECTION_WINDOW_MS = 3 * 60 * 1000;
+
+/**
+ * STEP 5: Donor accepts the blood request (Multi-donor collection model).
+ *
+ * Multiple candidate donors can accept while request is in WAITING_FOR_DONOR.
+ * First acceptance initializes donorSelectionDeadline (short window).
+ * Subsequent acceptances append to acceptedDonors without resetting deadline.
+ * Nearest donor is selected when window expires or when all candidates respond.
  */
 exports.acceptRequest = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
@@ -28,47 +38,147 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
   }
 
   const now = new Date();
+  const donorObjId = new mongoose.Types.ObjectId(donorId);
 
-  // Fix Flaw 1: Atomic findOneAndUpdate with status and active donor lock
-  // Only the designated active donor can transition a request currently in "waiting_for_donor"
-  // before the response deadline expires. Any competing concurrent writes will fail atomically.
+  const donorUser = await User.findById(donorId);
+  if (!donorUser) {
+    return res.status(404).json({ success: false, message: "Donor not found" });
+  }
+
+  const existing = await BloodRequest.findById(requestId);
+  if (!existing) {
+    return res.status(404).json({ success: false, message: "Blood request not found" });
+  }
+
+  // Pre-validate blood compatibility
+  if (!isBloodCompatible(donorUser.bloodGroup, existing.bloodGroup)) {
+    return res.status(403).json({
+      success: false,
+      message: `Your blood group (${donorUser.bloodGroup}) is not compatible with request blood group (${existing.bloodGroup}).`,
+    });
+  }
+
+  // Verify donor was broadcast to
+  const inPool = (existing.candidatePool || []).some(
+    (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
+  );
+  if (!inPool) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not a candidate for this request. Only donors who were broadcast to this request can accept.",
+    });
+  }
+
+  // Verify donor has not already declined
+  const hasDeclined = (existing.rejectedDonors || []).some(
+    (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
+  );
+  if (hasDeclined) {
+    return res.status(400).json({
+      success: false,
+      message: "You have already declined this request.",
+    });
+  }
+
+  // Verify donor has not already accepted
+  const alreadyAccepted = (existing.acceptedDonors || []).some(
+    (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
+  );
+  if (alreadyAccepted) {
+    return res.status(400).json({
+      success: false,
+      message: "You have already accepted this request.",
+    });
+  }
+
+  // Check overall acceptance deadline
+  if (existing.acceptanceDeadline && existing.acceptanceDeadline < now) {
+    return res.status(410).json({
+      success: false,
+      message: "The acceptance window for this request has expired. The search radius may be widening.",
+    });
+  }
+
+  // Check collection window deadline if already set
+  if (existing.donorSelectionDeadline && existing.donorSelectionDeadline < now) {
+    return res.status(410).json({
+      success: false,
+      message: "The donor selection window for this request has already closed.",
+    });
+  }
+
+  const collectionWindowMs = parseInt(process.env.DONOR_COLLECTION_WINDOW_MS, 10) || DEFAULT_COLLECTION_WINDOW_MS;
+  const computedDeadline = new Date(
+    Math.min(
+      now.getTime() + collectionWindowMs,
+      existing.acceptanceDeadline ? existing.acceptanceDeadline.getTime() : now.getTime() + collectionWindowMs
+    )
+  );
+
+  // ── Atomic accept: append to acceptedDonors & conditionally set donorSelectionDeadline ──
   const updatedRequest = await BloodRequest.findOneAndUpdate(
     {
       _id: requestId,
       status: REQUEST_STATUSES.WAITING_FOR_DONOR,
-      selectedDonor: donorId,
+      "acceptedDonors.donor": { $ne: donorObjId }, // prevent duplicate acceptance
+      "rejectedDonors.donor": { $ne: donorObjId }, // must not have declined
       $or: [
-        { donorResponseDeadline: { $exists: false } },
-        { donorResponseDeadline: null },
-        { donorResponseDeadline: { $gte: now } },
+        { donorSelectionDeadline: null },
+        { donorSelectionDeadline: { $exists: false } },
+        { donorSelectionDeadline: { $gte: now } },
+      ],
+      $and: [
+        {
+          $or: [
+            { acceptanceDeadline: null },
+            { acceptanceDeadline: { $exists: false } },
+            { acceptanceDeadline: { $gte: now } },
+          ],
+        },
       ],
     },
-    {
-      $set: {
-        status: REQUEST_STATUSES.MATCHED,
-        matchedAt: now,
-        donorResponseDeadline: null,
-        "donorQueue.$[elem].status": "accepted",
-      },
-      $push: {
-        acceptedDonors: {
-          donor: donorId,
-          acceptedAt: now,
-          status: "accepted",
+    [
+      {
+        $set: {
+          acceptedDonors: {
+            $concatArrays: [
+              "$acceptedDonors",
+              [
+                {
+                  donor: donorObjId,
+                  acceptedAt: now,
+                  status: "accepted",
+                },
+              ],
+            ],
+          },
+          // Set donorSelectionDeadline ONLY if null or not exists; NEVER overwrite if already set
+          donorSelectionDeadline: {
+            $cond: {
+              if: {
+                $or: [
+                  { $eq: ["$donorSelectionDeadline", null] },
+                  { $not: ["$donorSelectionDeadline"] },
+                ],
+              },
+              then: computedDeadline,
+              else: "$donorSelectionDeadline",
+            },
+          },
         },
       },
-    },
+    ],
     {
-      arrayFilters: [{ "elem.donor": donorId }],
       returnDocument: "after",
+      updatePipeline: true,
     }
   );
 
-  // If the atomic update returned null, find out precisely why for a clean, deterministic error
+  // ── Failure handling ──
   if (!updatedRequest) {
-    const existingRequest = await BloodRequest.findById(requestId);
+    const reloaded = await BloodRequest.findById(requestId);
 
-    if (!existingRequest) {
+    if (!reloaded) {
       return res.status(404).json({
         success: false,
         message: "Blood request not found",
@@ -76,117 +186,139 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
     }
 
     if (
-      existingRequest.status === REQUEST_STATUSES.MATCHED ||
-      existingRequest.status === REQUEST_STATUSES.DONOR_ACCEPTED ||
-      existingRequest.status === REQUEST_STATUSES.FINAL_COMPLETED
+      reloaded.status === REQUEST_STATUSES.MATCHED ||
+      reloaded.status === REQUEST_STATUSES.FINAL_COMPLETED
     ) {
       return res.status(409).json({
         success: false,
-        message: "This blood request has already been matched or completed with another donor.",
+        message: "This blood request has already been matched.",
       });
     }
 
-    if (existingRequest.status !== REQUEST_STATUSES.WAITING_FOR_DONOR) {
+    if (reloaded.status !== REQUEST_STATUSES.WAITING_FOR_DONOR) {
       return res.status(400).json({
         success: false,
-        message: `This request is not open for acceptance. Current status: '${existingRequest.status}'`,
+        message: `This request is not open for acceptance. Current status: '${reloaded.status}'`,
       });
     }
 
-    if (
-      existingRequest.selectedDonor &&
-      existingRequest.selectedDonor.toString() !== donorId.toString()
-    ) {
-      return res.status(403).json({
+    const reloadedAccepted = (reloaded.acceptedDonors || []).some(
+      (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
+    );
+    if (reloadedAccepted) {
+      return res.status(400).json({
         success: false,
-        message: "You are not the currently selected donor for this request.",
+        message: "You have already accepted this request.",
       });
     }
 
-    if (
-      existingRequest.donorResponseDeadline &&
-      existingRequest.donorResponseDeadline < now
-    ) {
-      // Trigger escalation immediately since deadline passed
-      await escalateToNextDonor(requestId, {
-        reason: "timeout",
-        actorId: donorId,
-        actorRole: "donor",
-        note: "Donor attempted acceptance after response deadline expired",
-      });
-
+    if (reloaded.donorSelectionDeadline && reloaded.donorSelectionDeadline < now) {
       return res.status(410).json({
         success: false,
-        message: "The response window for this blood request has expired. It has escalated to the next donor.",
+        message: "The donor selection window for this request has closed.",
+      });
+    }
+
+    if (reloaded.acceptanceDeadline && reloaded.acceptanceDeadline < now) {
+      return res.status(410).json({
+        success: false,
+        message: "The acceptance window for this request has expired.",
       });
     }
 
     return res.status(400).json({
       success: false,
-      message: "Unable to accept request due to concurrent state change.",
+      message: "Unable to accept request due to concurrent state change. Please refresh.",
     });
+  }
+
+  // ── Calculate donor distance for audit log ──
+  let distanceKm = null;
+  const poolEntry = (updatedRequest.candidatePool || []).find(
+    (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
+  );
+  if (poolEntry && typeof poolEntry.distanceKm === "number") {
+    distanceKm = poolEntry.distanceKm;
+  } else {
+    const donorCoords = parseCoordinates(donorUser.location);
+    const reqCoords = parseCoordinates(updatedRequest.location);
+    if (donorCoords && reqCoords) {
+      distanceKm = calculateHaversineDistanceKm(donorCoords[1], donorCoords[0], reqCoords[1], reqCoords[0]);
+    }
   }
 
   const donor = await User.findById(donorId).select("fullName phoneNumber bloodGroup");
 
-  // Step 5: Notify all other held/queued donors that the request has been fulfilled
-  await notifyHeldDonorsFulfilled(updatedRequest, donorId);
-
-  // Notify receiver
+  // Notify receiver that an acceptance has arrived
   await Notification.create({
     recipientId: updatedRequest.requestedBy,
     type: "donor_accepted",
     relatedRequest: updatedRequest._id,
-    message: `${donor.fullName} has accepted your blood request! The request is now matched.`,
+    message: `${donor?.fullName || "A donor"} has accepted your blood request${distanceKm > 0 ? ` (${distanceKm} km away)` : ""}! Selection window is collecting responses to find the nearest donor.`,
     priority: "high",
   });
 
-  // Notify hospital if assigned
-  if (updatedRequest.assignedHospital) {
-    await Notification.create({
-      recipientId: updatedRequest.assignedHospital,
-      type: "donor_accepted",
-      relatedRequest: updatedRequest._id,
-      message: `Donor ${donor.fullName} accepted blood request ${updatedRequest._id}.`,
-      priority: "high",
-    });
-  }
-
-  // Record audit log
   await logAuditEvent({
     requestId: updatedRequest._id,
     actor: donorId,
     actorRole: "donor",
     action: "DONOR_ACCEPTED",
     previousStatus: REQUEST_STATUSES.WAITING_FOR_DONOR,
-    newStatus: REQUEST_STATUSES.MATCHED,
+    newStatus: REQUEST_STATUSES.WAITING_FOR_DONOR,
     metadata: {
       donorId,
       acceptedAt: now,
-      totalAcceptances: updatedRequest.acceptedDonors.length,
+      distanceKm,
+      totalAccepted: updatedRequest.acceptedDonors.length,
+      selectionDeadline: updatedRequest.donorSelectionDeadline,
     },
-    note: `Donor ${donor.fullName} accepted the request within the response window`,
+    note: `Donor ${donor?.fullName || donorId} accepted (${distanceKm} km). Added to acceptance pool.`,
   });
+
+  // ── Early selection check: if all candidatePool members have responded (accepted or declined) ──
+  const totalPoolCandidates = (updatedRequest.candidatePool || []).length;
+  const totalResponses = (updatedRequest.acceptedDonors || []).length + (updatedRequest.rejectedDonors || []).length;
+
+  if (totalPoolCandidates > 0 && totalResponses >= totalPoolCandidates) {
+    // All candidates have responded; trigger selection immediately without waiting
+    await selectNearestAcceptedDonor(updatedRequest._id);
+  } else {
+    // Schedule in-process fallback timer to run selection as soon as donorSelectionDeadline expires
+    const delayMs = updatedRequest.donorSelectionDeadline.getTime() - Date.now();
+    if (delayMs > 0 && delayMs <= 10 * 60 * 1000) {
+      setTimeout(() => {
+        selectNearestAcceptedDonor(updatedRequest._id).catch((err) => {
+          console.error(`[SelectionTimer] Error executing selection for request ${updatedRequest._id}:`, err.message);
+        });
+      }, delayMs);
+    }
+  }
+
+  // Reload request to return current state (might have transitioned to matched if early selection triggered)
+  const currentReq = await BloodRequest.findById(requestId);
 
   return res.status(200).json({
     success: true,
-    message: "Request accepted successfully. Request is now matched.",
+    message: currentReq.status === REQUEST_STATUSES.MATCHED
+      ? "Request accepted successfully. Selection completed and nearest donor matched."
+      : "Request accepted successfully. Selection window is open for nearby donors.",
     data: {
-      requestId: updatedRequest._id,
-      status: updatedRequest.status,
-      matchedDonor: {
-        id: donor._id,
-        fullName: donor.fullName,
-        bloodGroup: donor.bloodGroup,
-      },
-      matchedAt: updatedRequest.matchedAt,
+      requestId: currentReq._id,
+      status: currentReq.status,
+      donorSelectionDeadline: currentReq.donorSelectionDeadline,
+      totalAcceptances: (currentReq.acceptedDonors || []).length,
+      matchedDonor: currentReq.confirmedDonor,
     },
   });
 });
 
 /**
- * STEP 6: Donor declines the blood request.
- * Automatically escalates to the next-nearest held donor in queue.
+ * Donor declines the blood request.
+ *
+ * Part A-5 redesign: declining no longer triggers escalation to a next-in-queue donor.
+ * The request stays open (waiting_for_donor) for all remaining candidates. The declining
+ * donor is added to rejectedDonors and removed from candidatePool so they stop seeing
+ * the request in their dashboard.
  */
 exports.rejectRequest = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
@@ -209,43 +341,46 @@ exports.rejectRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  // Must be in waiting_for_donor or hospital_approved
-  if (
-    request.status !== REQUEST_STATUSES.WAITING_FOR_DONOR &&
-    request.status !== REQUEST_STATUSES.HOSPITAL_APPROVED
-  ) {
+  if (request.status !== REQUEST_STATUSES.WAITING_FOR_DONOR) {
     return res.status(400).json({
       success: false,
-      message: `Cannot decline request in status '${request.status}'`,
+      message: `Cannot decline a request in status '${request.status}'`,
     });
   }
 
-  // Verify that the decliner is the active selected donor (or queued)
-  const isSelectedDonor =
-    request.selectedDonor && request.selectedDonor.toString() === donorId.toString();
+  const inPool = request.candidatePool.some(
+    (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
+  );
+  if (!inPool) {
+    return res.status(403).json({
+      success: false,
+      message: "You are not a candidate for this request.",
+    });
+  }
 
-  // Add to rejectedDonors array
+  // Add to rejectedDonors
   request.rejectedDonors.push({
     donor: donorId,
     reason: rejectionReason || "Donor declined request",
     rejectedAt: new Date(),
   });
 
-  // Mark in donorQueue if present
-  if (Array.isArray(request.donorQueue)) {
-    const qIndex = request.donorQueue.findIndex(
-      (item) => item.donor && item.donor.toString() === donorId.toString()
-    );
-    if (qIndex !== -1) {
-      request.donorQueue[qIndex].status = "declined";
-    }
-  }
+  // Remove from candidatePool so they no longer see this request in viewRequests
+  request.candidatePool = request.candidatePool.filter(
+    (item) => (item.donor?._id || item.donor).toString() !== donorId.toString()
+  );
 
   await request.save();
 
+  // If candidatePool has no more pending candidates and we have acceptances, finalize selection immediately
+  if (request.status === REQUEST_STATUSES.WAITING_FOR_DONOR && request.acceptedDonors && request.acceptedDonors.length > 0) {
+    if (request.candidatePool.length === 0) {
+      await selectNearestAcceptedDonor(request._id);
+    }
+  }
+
   const donor = await User.findById(donorId).select("fullName");
 
-  // Record audit log for donor decline
   await logAuditEvent({
     requestId: request._id,
     actor: donorId,
@@ -254,45 +389,31 @@ exports.rejectRequest = asyncHandler(async (req, res) => {
     previousStatus: request.status,
     newStatus: request.status,
     metadata: { donorId, rejectionReason },
-    note: `Donor ${donor?.fullName || donorId} declined request. Reason: ${rejectionReason || "None provided"}`,
+    note: `Donor ${donor?.fullName || donorId} declined. Removed from candidatePool. Request stays open for other candidates. Reason: ${rejectionReason || "None provided"}`,
   });
-
-  // If the active selected donor declined, automatically escalate to the next held donor
-  let escalationResult = null;
-  if (isSelectedDonor && request.status === REQUEST_STATUSES.WAITING_FOR_DONOR) {
-    escalationResult = await escalateToNextDonor(request._id, {
-      reason: "declined",
-      actorId: donorId,
-      actorRole: "donor",
-      note: rejectionReason || "Donor declined request",
-    });
-  }
 
   return res.status(200).json({
     success: true,
-    message: "Request declined. System automatically escalated to the next eligible donor.",
+    message: "Request declined. Other eligible donors can still accept.",
     data: {
       requestId: request._id,
-      status: escalationResult?.status || request.status,
-      escalated: !!escalationResult?.success,
-      nextDonorId: escalationResult?.nextDonorId || null,
+      status: request.status,
     },
   });
 });
 
 /**
- * Get all blood requests matched or accepted for the logged-in donor.
+ * Get blood requests where this donor is the confirmed (matched) donor or has been accepted.
+ * Part A-9: removed selectedDonor query, now uses acceptedDonors.donor.
  */
 exports.getDonorAcceptances = asyncHandler(async (req, res) => {
   const donorId = req.user.id;
 
   const requests = await BloodRequest.find({
-    selectedDonor: donorId,
+    "acceptedDonors.donor": new mongoose.Types.ObjectId(donorId),
     status: {
       $in: [
-        REQUEST_STATUSES.WAITING_FOR_DONOR,
         REQUEST_STATUSES.MATCHED,
-        REQUEST_STATUSES.DONOR_ACCEPTED,
         REQUEST_STATUSES.BLOOD_TESTING,
         REQUEST_STATUSES.ADMIN_VERIFIED,
         REQUEST_STATUSES.BLOOD_TEST_SCHEDULED,
@@ -302,6 +423,7 @@ exports.getDonorAcceptances = asyncHandler(async (req, res) => {
   })
     .populate("requestedBy", "fullName phoneNumber location bloodGroup")
     .populate("assignedHospital", "hospitalName hospitalPhone")
+    .populate("confirmedDonor", "fullName bloodGroup")
     .sort({ createdAt: -1 });
 
   return res.status(200).json({

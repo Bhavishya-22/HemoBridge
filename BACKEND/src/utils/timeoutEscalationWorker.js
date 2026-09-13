@@ -1,37 +1,62 @@
 const BloodRequest = require("../model/bloodRequestModel");
 const { REQUEST_STATUSES } = require("./stateMachine");
-const { escalateToNextDonor } = require("./donorSelectionService");
+const { widenSearchRadius, selectNearestAcceptedDonor } = require("./donorSelectionService");
 
 let workerInterval = null;
 const SWEEP_INTERVAL_MS = 60 * 1000; // Run sweep every 60 seconds
 
 /**
- * Perform a single sweep to find and escalate expired requests.
+ * Perform sweeps for:
+ *  1. Expired donor selection windows (requests in WAITING_FOR_DONOR with acceptances)
+ *  2. Expired broadcast acceptance deadlines (requests in WAITING_FOR_DONOR with 0 acceptances)
  */
 async function runTimeoutEscalationSweep() {
   try {
     const now = new Date();
 
-    // Query active requests waiting for a donor whose deadline has passed
-    const expiredRequests = await BloodRequest.find({
+    // ── Sweep 1: Finalize nearest donor selection for expired collection windows ──
+    const selectionExpiredRequests = await BloodRequest.find({
       status: REQUEST_STATUSES.WAITING_FOR_DONOR,
-      donorResponseDeadline: { $lte: now },
-    }).select("_id selectedDonor donorResponseDeadline emergencyLevel");
+      donorSelectionDeadline: { $lte: now },
+      "acceptedDonors.0": { $exists: true },
+    }).select("_id donorSelectionDeadline emergencyLevel acceptedDonors");
 
-    if (expiredRequests.length > 0) {
-      console.log(`[TimeoutWorker] Found ${expiredRequests.length} expired blood requests. Escalating...`);
+    if (selectionExpiredRequests.length > 0) {
+      console.log(`[TimeoutWorker] Found ${selectionExpiredRequests.length} requests with expired selection window. Selecting nearest donor...`);
     }
 
-    for (const req of expiredRequests) {
+    for (const req of selectionExpiredRequests) {
       try {
-        await escalateToNextDonor(req._id, {
-          reason: "timeout",
+        await selectNearestAcceptedDonor(req._id);
+      } catch (err) {
+        console.error(`[TimeoutWorker] Error selecting nearest donor for request ${req._id}:`, err.message);
+      }
+    }
+
+    // ── Sweep 2: Radius widening for expired broadcast deadlines with zero acceptances ──
+    const radiusExpiredRequests = await BloodRequest.find({
+      status: REQUEST_STATUSES.WAITING_FOR_DONOR,
+      acceptanceDeadline: { $lte: now },
+      $or: [
+        { acceptedDonors: { $size: 0 } },
+        { acceptedDonors: { $exists: false } },
+        { acceptedDonors: null },
+      ],
+    }).select("_id acceptanceDeadline emergencyLevel");
+
+    if (radiusExpiredRequests.length > 0) {
+      console.log(`[TimeoutWorker] Found ${radiusExpiredRequests.length} expired blood requests without acceptances. Widening search radius...`);
+    }
+
+    for (const req of radiusExpiredRequests) {
+      try {
+        await widenSearchRadius(req._id, {
           actorId: null,
           actorRole: "system",
-          note: `Automated escalation: donor response deadline ${req.donorResponseDeadline} passed`,
+          note: `Automated radius widening: acceptance deadline ${req.acceptanceDeadline} passed`,
         });
       } catch (err) {
-        console.error(`[TimeoutWorker] Error escalating request ${req._id}:`, err.message);
+        console.error(`[TimeoutWorker] Error widening radius for request ${req._id}:`, err.message);
       }
     }
   } catch (error) {

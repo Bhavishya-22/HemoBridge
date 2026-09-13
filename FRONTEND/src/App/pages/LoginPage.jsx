@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { getRoleHomePath, normalizeUser } from "../../utils/roleAccess";
 import "../styles/login.css";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+import { API_BASE } from "../../config/api";
 
 export default function LoginPage() {
   const [form, setForm] = useState({ username: "", password: "" });
@@ -42,14 +43,12 @@ export default function LoginPage() {
         return;
       }
 
-      login(data.user);
+      login(normalizeUser(data.user));
       const role = data.user.role;
-      if (role === "admin") {
-        navigate("/admin");
-      } else if (role === "hospital") {
-        navigate("/hospital");
+      if (role === "admin" || role === "hospital") {
+        navigate(getRoleHomePath(role));
       } else {
-        navigate(data.user.profileCompleted ? "/home" : "/profile");
+        navigate(data.user.profileCompleted ? getRoleHomePath(role) : "/profile");
       }
     } catch {
       setError("Unable to connect to server. Please try again later.");

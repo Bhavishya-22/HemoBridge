@@ -1,10 +1,12 @@
-//donationController.js
+// donationController.js
 const mongoose = require("mongoose");
 const DonationRecord = require("../model/donationRecordModel");
 const BloodRequest = require("../model/bloodRequestModel");
 const Notification = require("../model/notificationModel");
 const User = require("../model/userModel");
 const asyncHandler = require("express-async-handler");
+const { REQUEST_STATUSES } = require("../utils/stateMachine");
+const { promoteNearestBackupDonor } = require("../utils/donorSelectionService");
 
 exports.getDonationStatus = asyncHandler(async (req, res) => {
     const { donationId } = req.params;
@@ -100,7 +102,6 @@ exports.getHospitalDonations = asyncHandler(async (req, res) => {
     });
 });
 
-
 exports.verifyDonation = asyncHandler(async (req, res) => {
     const { donationId } = req.params;
     const { isVerified, verificationNotes } = req.body;
@@ -141,11 +142,11 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
 
         await donation.save();
 
-        // Update request
+        // Update request - fix enum bug: status is final_completed
         await BloodRequest.findByIdAndUpdate(
             donation.requestId,
             {
-                status: "completed",
+                status: REQUEST_STATUSES.FINAL_COMPLETED,
                 bloodTestResult: "accepted",
                 completedAt: new Date(),
             }
@@ -198,16 +199,6 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
 
         await donation.save();
 
-        // Reset request for next donor allocation
-        await BloodRequest.findByIdAndUpdate(
-            donation.requestId,
-            {
-                status: "waiting_for_donor",
-                bloodTestResult: "rejected",
-                selectedDonor: null,
-            }
-        );
-
         // Make donor available again
         await User.findByIdAndUpdate(
             donation.donorId,
@@ -226,22 +217,22 @@ exports.verifyDonation = asyncHandler(async (req, res) => {
                 "Your blood donation was not accepted after testing.",
         });
 
-        // Notify receiver
-        await Notification.create({
-            recipientId: donation.receiverId,
-            type: "blood_test_rejected",
-            relatedDonation: donation._id,
-            message:
-                "The selected donor was not eligible after testing. A new donor will be assigned shortly.",
-        });
+        // Delegate backup promotion to centralized service
+        const promotionResult = await promoteNearestBackupDonor(
+            donation.requestId,
+            donation.donorId,
+            verificationNotes || "Blood donation rejected by hospital during verification"
+        );
 
         return res.status(200).json({
             success: true,
-            message: "Blood donation rejected",
+            message: "Blood donation rejected. " + promotionResult.message,
             data: {
                 donationId: donation._id,
                 status: donation.status,
                 verificationStatus: donation.verificationStatus,
+                nextDonor: promotionResult.nextDonor ? promotionResult.nextDonor.fullName : null,
+                promoted: promotionResult.promoted,
             },
         });
     }

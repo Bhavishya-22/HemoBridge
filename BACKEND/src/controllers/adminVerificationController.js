@@ -4,6 +4,7 @@ const DonationRecord = require("../model/donationRecordModel");
 const Notification = require("../model/notificationModel");
 const User = require("../model/userModel");
 const asyncHandler = require("express-async-handler");
+const { REQUEST_STATUSES } = require("../utils/stateMachine");
 
 // STEP 4: Admin views all donors who accepted
 exports.getAcceptedDonors = asyncHandler(async (req, res) => {
@@ -26,8 +27,8 @@ exports.getAcceptedDonors = asyncHandler(async (req, res) => {
             message: "Blood request not found",
         });
     }
-    console.log(request.status);
-    if (request.status !== "donor_accepted" && request.status !=="admin_verified") {
+
+    if (request.status !== REQUEST_STATUSES.MATCHED && request.status !== REQUEST_STATUSES.ADMIN_VERIFIED) {
         return res.status(400).json({
             success: false,
             message: "Request has no acceptances yet",
@@ -46,13 +47,13 @@ exports.getAcceptedDonors = asyncHandler(async (req, res) => {
                 donorId: item.donor._id,
                 donor: item.donor,
                 acceptedAt: item.acceptedAt,
-                status:item.status,
+                status: item.status,
             })),
         },
     });
 });
 
-// STEP 4: Admin selects ONE donor to proceed
+// STEP 4: Admin selects ONE donor to proceed (Manual override of matched donor)
 exports.selectDonorForVerification = asyncHandler(async (req, res) => {
     const { requestId } = req.params;
     const { selectedDonorId } = req.body;
@@ -75,10 +76,10 @@ exports.selectDonorForVerification = asyncHandler(async (req, res) => {
         });
     }
 
-    if (request.status !== "donor_accepted") {
+    if (request.status !== REQUEST_STATUSES.MATCHED) {
         return res.status(400).json({
             success: false,
-            message: "Request must have acceptances to select from",
+            message: "Request must be in matched status to select donor",
         });
     }
 
@@ -98,21 +99,15 @@ exports.selectDonorForVerification = asyncHandler(async (req, res) => {
     request.adminVerified = true;
     request.adminVerifiedBy = adminId;
     request.adminVerifiedAt = new Date();
-    request.status = "admin_verified";
-    request.selectedDonor = selectedDonorId;
+    request.status = REQUEST_STATUSES.ADMIN_VERIFIED;
+    request.confirmedDonor = selectedDonorId;
 
-    // Mark selected donor
+    // Mark selected donor status in acceptedDonors
     request.acceptedDonors.forEach((item) => {
         if (item.donor._id.toString() === selectedDonorId.toString()) {
             item.status = "selected";
         } else {
             item.status = "backup";
-            // Add to backup on hold
-            request.backupDonorsOnHold.push({
-                donor: item.donor._id,
-                heldAt: new Date(),
-                status: "hold",
-            });
         }
     });
 
@@ -159,7 +154,7 @@ exports.selectDonorForVerification = asyncHandler(async (req, res) => {
         data: {
             requestId: request._id,
             status: request.status,
-            selectedDonor: donor.fullName,
+            confirmedDonor: donor.fullName,
             backupDonorsCount: backupDonorIds.length,
         },
     });
@@ -168,7 +163,7 @@ exports.selectDonorForVerification = asyncHandler(async (req, res) => {
 // Get all requests with acceptances waiting for admin verification (Step 4)
 exports.getPendingAdminVerifications = asyncHandler(async (req, res) => {
     const requests = await BloodRequest.find({
-        status: "donor_accepted",
+        status: REQUEST_STATUSES.MATCHED,
     })
         .populate("requestedBy", "fullName bloodGroup")
         .populate("acceptedDonors.donor", "fullName")
@@ -251,4 +246,4 @@ exports.getAllRequests = asyncHandler(async (req, res) => {
         total: requests.length,
         requests,
     });
-});
+});

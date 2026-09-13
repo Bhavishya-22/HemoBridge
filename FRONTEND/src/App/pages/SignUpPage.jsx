@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { getRoleHomePath, normalizeUser } from "../../utils/roleAccess";
+import { API_BASE } from "../../config/api";
 import "../styles/signup.css";
 
 export default function SignupPage() {
@@ -7,6 +10,7 @@ export default function SignupPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
@@ -15,7 +19,7 @@ export default function SignupPage() {
     setError("");
     setLoading(true);
     try {
-      const res = await fetch("http://localhost:3000/auth/register", {
+      const res = await fetch(`${API_BASE}/auth/register`, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
@@ -30,7 +34,8 @@ export default function SignupPage() {
       if (!res.ok) {
         setError(data.message || "Registration failed. Please try again.");
       } else {
-        navigate(data.user.profileCompleted ? "/home" : "/profile");
+        login(normalizeUser(data.user));
+        navigate(data.user.profileCompleted ? getRoleHomePath(data.user.role) : "/profile");
       }
     } catch {
       setError("Unable to connect to server. Please try again later.");

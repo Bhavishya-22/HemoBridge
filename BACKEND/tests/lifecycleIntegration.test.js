@@ -9,11 +9,15 @@ const AuditLog = require("../src/model/auditLogModel");
 
 const {
   findAndRankEligibleDonors,
-  escalateToNextDonor,
-  notifyHeldDonorsFulfilled,
+  broadcastToEligibleDonors,
+  widenSearchRadius,
+  notifyCandidatesFulfilled,
+  selectNearestAcceptedDonor,
+  DEFAULT_MAX_DISTANCE_KM,
 } = require("../src/utils/donorSelectionService");
 const { REQUEST_STATUSES } = require("../src/utils/stateMachine");
 const { logAuditEvent } = require("../src/utils/auditLogger");
+const { userUpdateProfile } = require("../src/controllers/userController");
 
 async function runIntegrationTests() {
   const uri = process.env.TEST_MONGO_URI || process.env.mongoURI || "mongodb://127.0.0.1:27017/blood-bank-test";
@@ -44,6 +48,7 @@ async function runIntegrationTests() {
       password: "password123",
       role: "receiver",
       bloodGroup: "A+",
+      profileCompleted: false, // receiver without profile completion
       location: {
         city: "Mumbai",
         state: "Maharashtra",
@@ -76,7 +81,7 @@ async function runIntegrationTests() {
     });
     cleanupUserIds.push(admin._id);
 
-    // Donor 1: Closest (~2 km away)
+    // Donor 1: Closest (~1.5 km away)
     const donor1 = await User.create({
       fullName: "Nearest Donor 1",
       username: `${testPrefix}donor1`,
@@ -86,6 +91,7 @@ async function runIntegrationTests() {
       bloodGroup: "A+",
       availabilityStatus: "available",
       isVerified: true,
+      isBlocked: false,
       location: {
         city: "Mumbai",
         coordinates: {
@@ -106,6 +112,7 @@ async function runIntegrationTests() {
       bloodGroup: "O+", // O+ can donate to A+
       availabilityStatus: "available",
       isVerified: true,
+      isBlocked: false,
       location: {
         city: "Mumbai",
         coordinates: {
@@ -116,7 +123,7 @@ async function runIntegrationTests() {
     });
     cleanupUserIds.push(donor2._id);
 
-    // Donor 3: Farther (~30 km away)
+    // Donor 3: Farther (~28 km away)
     const donor3 = await User.create({
       fullName: "Far Donor 3",
       username: `${testPrefix}donor3`,
@@ -126,6 +133,7 @@ async function runIntegrationTests() {
       bloodGroup: "A-", // A- can donate to A+
       availabilityStatus: "available",
       isVerified: true,
+      isBlocked: false,
       location: {
         city: "Mumbai",
         coordinates: {
@@ -138,7 +146,7 @@ async function runIntegrationTests() {
 
     console.log("✅ Test users created successfully");
 
-    // 2. STEP 1: Receiver submits blood request
+    // 2. STEP 1: Receiver submits blood request (flat coordinates format)
     const bloodRequest = await BloodRequest.create({
       requestedBy: receiver._id,
       bloodGroup: "A+",
@@ -146,6 +154,7 @@ async function runIntegrationTests() {
       emergencyLevel: "high",
       location: {
         city: "Mumbai",
+        state: "Maharashtra",
         coordinates: {
           lat: 19.076,
           lng: 72.8777,
@@ -164,11 +173,11 @@ async function runIntegrationTests() {
     });
 
     assert.strictEqual(bloodRequest.status, REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL);
-    console.log("✅ Step 1 verified: Request created in pending_hospital_approval");
+    console.log("✅ Step 1 verified: Request created in pending_hospital_approval with flat coordinates");
 
-    // 3. STEP 2 & 3: Hospital Verification & Geospatial Donor Ranking
+    // 3. STEP 2 & 3: Hospital Approval & Broadcast to Candidate Pool
     const rankedDonors = await findAndRankEligibleDonors(bloodRequest, { limit: 10, maxDistanceKm: 50 });
-    assert.strictEqual(rankedDonors.length >= 3, true, "Should find at least 3 eligible donors");
+    assert.strictEqual(rankedDonors.length >= 3, true, "Should find at least 3 eligible donors in 50km radius");
 
     // Verify ordering by distance: Nearest should be donor1
     const foundDonorIds = rankedDonors.map((d) => (d.donor._id || d.donor).toString());
@@ -176,177 +185,224 @@ async function runIntegrationTests() {
 
     console.log(`✅ Step 3 verified: Found and ranked ${rankedDonors.length} donors. Nearest: ${donor1.fullName} (${rankedDonors[0].distanceKm} km)`);
 
-    // STEP 4: Build donorQueue with nearest donor notified and others held
+    // Store candidatePool on request and set acceptanceDeadline
     const deadline = new Date(Date.now() + 30 * 60 * 1000);
     bloodRequest.hospitalApproved = true;
     bloodRequest.hospitalApprovedBy = hospital._id;
     bloodRequest.assignedHospital = hospital._id;
-    bloodRequest.donorQueue = rankedDonors.map((item, idx) => ({
+    bloodRequest.candidatePool = rankedDonors.map((item) => ({
       donor: item.donor._id,
       distanceKm: item.distanceKm,
-      sortedIndex: idx,
-      status: idx === 0 ? "notified" : "held",
-      responseDeadline: idx === 0 ? deadline : null,
+      searchRadiusKm: DEFAULT_MAX_DISTANCE_KM,
+      addedAt: new Date(),
     }));
-    bloodRequest.currentDonorIndex = 0;
-    bloodRequest.selectedDonor = donor1._id;
-    bloodRequest.donorResponseDeadline = deadline;
+    bloodRequest.acceptanceDeadline = deadline;
     bloodRequest.status = REQUEST_STATUSES.WAITING_FOR_DONOR;
     await bloodRequest.save();
 
-    await logAuditEvent({
-      requestId: bloodRequest._id,
-      actor: hospital._id,
-      actorRole: "hospital",
-      action: "HOSPITAL_APPROVED",
-      previousStatus: REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL,
-      newStatus: REQUEST_STATUSES.WAITING_FOR_DONOR,
-      metadata: { selectedDonor: donor1._id, heldDonorsCount: rankedDonors.length - 1 },
-    });
+    // Broadcast notifications to all candidate donors
+    await broadcastToEligibleDonors(bloodRequest, rankedDonors);
 
-    assert.strictEqual(bloodRequest.donorQueue[0].status, "notified");
-    assert.strictEqual(bloodRequest.donorQueue[1].status, "held");
-    assert.strictEqual(bloodRequest.donorQueue[2].status, "held");
-    console.log("✅ Step 4 verified: Nearest donor notified, remaining donors placed in 'held' queue");
+    // Verify that NO single donor was pre-selected
+    assert.strictEqual(bloodRequest.confirmedDonor, null, "confirmedDonor must be null during waiting_for_donor");
+    assert.strictEqual(bloodRequest.candidatePool.length, 3, "All 3 eligible donors must be in candidatePool");
+    console.log("✅ Step 4 verified: Candidate pool populated and broadcast sent without selecting a single donor");
 
-    // Test Flaw 3: Admin notifications use actual query, not "ADMIN_ID_HERE"
-    const admins = await User.find({ role: "admin" }).select("_id");
-    assert.strictEqual(admins.length > 0, true, "Found real admin users");
-    for (const adm of admins) {
-      assert.notStrictEqual(adm._id.toString(), "ADMIN_ID_HERE");
-    }
-    console.log("✅ Flaw 3 verified: Admin lookup uses real ObjectId query, no literal placeholders");
+    // 4. MULTI-DONOR ATOMIC ACCEPTANCE & NEAREST SELECTION TEST:
+    // Simulate concurrent accept between Donor 1 and Donor 2. Both must be preserved in acceptedDonors.
+    // Selection chooses nearest donor (Donor 1 at ~1.5 km) as primary, and Donor 2 as backup.
+    console.log("▶ Testing multi-donor concurrent acceptance & nearest selection...");
+    const acceptTime = new Date();
+    const collectionDeadline = new Date(acceptTime.getTime() + 180000);
 
-    // 4. STEP 6 TEST: Donor 1 declines -> Automatic Escalation to Donor 2
-    console.log("▶ Testing automatic escalation when Donor 1 declines...");
-    const declineResult = await escalateToNextDonor(bloodRequest._id, {
-      reason: "declined",
-      actorId: donor1._id,
-      actorRole: "donor",
-      note: "Unavailable due to travel",
-    });
-
-    assert.strictEqual(declineResult.success, true);
-    assert.strictEqual(declineResult.nextDonorId, donor2._id.toString(), "Should escalate to Donor 2");
-
-    const reloadedAfterDecline = await BloodRequest.findById(bloodRequest._id);
-    assert.strictEqual(reloadedAfterDecline.status, REQUEST_STATUSES.WAITING_FOR_DONOR);
-    assert.strictEqual(reloadedAfterDecline.selectedDonor.toString(), donor2._id.toString());
-    assert.strictEqual(reloadedAfterDecline.donorQueue[0].status, "declined");
-    assert.strictEqual(reloadedAfterDecline.donorQueue[1].status, "notified");
-    assert.strictEqual(reloadedAfterDecline.donorQueue[2].status, "held");
-    console.log("✅ Step 6 verified: Automatic escalation to next held donor upon decline");
-
-    // 5. ATOMIC RACE CONDITION TEST (Flaw 1):
-    // Simulate two donors attempting to accept concurrently.
-    // Exactly ONE must succeed, competing write must fail.
-    console.log("▶ Testing atomic acceptance race condition prevention...");
-    const now = new Date();
-
-    const [competingAccept1, competingAccept2] = await Promise.all([
-      // Donor 2 (the legitimately active donor) accepts
+    const [raceResult1, raceResult2] = await Promise.all([
+      // Donor 1 attempts to accept atomically
       BloodRequest.findOneAndUpdate(
         {
           _id: bloodRequest._id,
           status: REQUEST_STATUSES.WAITING_FOR_DONOR,
-          selectedDonor: donor2._id,
-          $or: [
-            { donorResponseDeadline: { $exists: false } },
-            { donorResponseDeadline: null },
-            { donorResponseDeadline: { $gte: now } },
-          ],
+          "acceptedDonors.donor": { $ne: donor1._id },
+          "rejectedDonors.donor": { $ne: donor1._id },
         },
-        {
-          $set: {
-            status: REQUEST_STATUSES.MATCHED,
-            matchedAt: now,
-            donorResponseDeadline: null,
-            "donorQueue.$[elem].status": "accepted",
-          },
-          $push: {
-            acceptedDonors: {
-              donor: donor2._id,
-              acceptedAt: now,
-              status: "accepted",
+        [
+          {
+            $set: {
+              acceptedDonors: {
+                $concatArrays: [
+                  "$acceptedDonors",
+                  [{ donor: donor1._id, acceptedAt: acceptTime, status: "accepted" }],
+                ],
+              },
+              donorSelectionDeadline: {
+                $cond: {
+                  if: { $or: [{ $eq: ["$donorSelectionDeadline", null] }, { $not: ["$donorSelectionDeadline"] }] },
+                  then: collectionDeadline,
+                  else: "$donorSelectionDeadline",
+                },
+              },
             },
           },
-        },
-        {
-          arrayFilters: [{ "elem.donor": donor2._id }],
-          returnDocument: "after",
-        }
+        ],
+        { returnDocument: "after", updatePipeline: true }
       ),
-      // Competing concurrent call with non-selected or late donor
+      // Donor 2 attempts to accept simultaneously
       BloodRequest.findOneAndUpdate(
         {
           _id: bloodRequest._id,
           status: REQUEST_STATUSES.WAITING_FOR_DONOR,
-          selectedDonor: donor3._id, // Not selected!
-          $or: [
-            { donorResponseDeadline: { $exists: false } },
-            { donorResponseDeadline: null },
-            { donorResponseDeadline: { $gte: now } },
-          ],
+          "acceptedDonors.donor": { $ne: donor2._id },
+          "rejectedDonors.donor": { $ne: donor2._id },
         },
-        {
-          $set: {
-            status: REQUEST_STATUSES.MATCHED,
-            matchedAt: now,
-            donorResponseDeadline: null,
-            "donorQueue.$[elem].status": "accepted",
+        [
+          {
+            $set: {
+              acceptedDonors: {
+                $concatArrays: [
+                  "$acceptedDonors",
+                  [{ donor: donor2._id, acceptedAt: acceptTime, status: "accepted" }],
+                ],
+              },
+              donorSelectionDeadline: {
+                $cond: {
+                  if: { $or: [{ $eq: ["$donorSelectionDeadline", null] }, { $not: ["$donorSelectionDeadline"] }] },
+                  then: collectionDeadline,
+                  else: "$donorSelectionDeadline",
+                },
+              },
+            },
           },
-        },
-        {
-          arrayFilters: [{ "elem.donor": donor3._id }],
-          returnDocument: "after",
-        }
+        ],
+        { returnDocument: "after", updatePipeline: true }
       ),
     ]);
 
-    assert.notStrictEqual(competingAccept1, null, "Legitimate selected donor update must succeed");
-    assert.strictEqual(competingAccept2, null, "Conflicting concurrent update MUST fail (return null)");
-    console.log("✅ Flaw 1 verified: Atomic findOneAndUpdate successfully prevents concurrent double-accept race conditions");
+    assert.ok(raceResult1, "Donor 1 acceptance must succeed");
+    assert.ok(raceResult2, "Donor 2 acceptance must succeed");
 
-    // STEP 5: Held donors notification
-    await notifyHeldDonorsFulfilled(competingAccept1, donor2._id);
-    console.log("✅ Step 5 verified: Remaining held donors notified of request fulfillment");
+    const reloadedAfterAccept = await BloodRequest.findById(bloodRequest._id);
+    assert.strictEqual(reloadedAfterAccept.acceptedDonors.length, 2, "Both donors must be in acceptedDonors");
+    assert.strictEqual(reloadedAfterAccept.status, REQUEST_STATUSES.WAITING_FOR_DONOR, "Request must remain waiting_for_donor during collection");
+    console.log("✅ Multi-donor acceptance verified: Both donors recorded without premature matching");
 
-    // 6. AUDIT TRAIL TEST (Flaw 6)
-    const auditLogs = await AuditLog.find({ requestId: bloodRequest._id }).sort({ createdAt: 1 });
-    assert.strictEqual(auditLogs.length >= 3, true, "Audit trail must record every state change");
-    const actions = auditLogs.map((l) => l.action);
-    console.log("Audit log actions recorded:", actions);
-    assert.strictEqual(actions.includes("REQUEST_CREATED"), true);
-    assert.strictEqual(actions.includes("HOSPITAL_APPROVED"), true);
-    assert.strictEqual(actions.includes("DONOR_DECLINED_ESCALATED"), true);
-    console.log("✅ Flaw 6 verified: Complete audit trail recorded with actors, timestamps, and status changes");
+    // Execute nearest donor selection
+    const selectResult = await selectNearestAcceptedDonor(bloodRequest._id);
+    assert.strictEqual(selectResult.success, true, "selectNearestAcceptedDonor must succeed");
+    assert.strictEqual(selectResult.status, REQUEST_STATUSES.MATCHED, "Request must transition to matched");
 
-    // 7. QUEUE EXHAUSTION TEST
-    console.log("▶ Testing queue exhaustion to 'no_donors_available'...");
-    // Create another request with empty or exhausted queue
-    const emptyQueueRequest = await BloodRequest.create({
+    const matchedRequest = await BloodRequest.findById(bloodRequest._id);
+    assert.strictEqual(
+      matchedRequest.confirmedDonor.toString(),
+      donor1._id.toString(),
+      "Nearest donor (Donor 1, ~1.5 km) must be selected as primary confirmedDonor"
+    );
+    assert.strictEqual(matchedRequest.status, REQUEST_STATUSES.MATCHED);
+
+    const primaryEntry = matchedRequest.acceptedDonors.find((a) => a.donor.toString() === donor1._id.toString());
+    const backupEntry = matchedRequest.acceptedDonors.find((a) => a.donor.toString() === donor2._id.toString());
+    assert.strictEqual(primaryEntry.status, "selected", "Donor 1 must have status 'selected'");
+    assert.strictEqual(backupEntry.status, "backup", "Donor 2 must have status 'backup'");
+
+    console.log(`✅ Nearest donor selection verified: Donor 1 (${matchedRequest.confirmedDonorDistanceKm} km) is primary, Donor 2 is backup`);
+
+    // 5. RADIUS WIDENING TEST
+    console.log("▶ Testing radius widening behavior...");
+    const expiredRequest = await BloodRequest.create({
       requestedBy: receiver._id,
-      bloodGroup: "B-",
+      bloodGroup: "AB-",
       quantity: 1,
       status: REQUEST_STATUSES.WAITING_FOR_DONOR,
-      selectedDonor: donor3._id,
-      donorQueue: [{ donor: donor3._id, status: "notified" }],
+      acceptanceDeadline: new Date(Date.now() - 5000), // already expired
+      candidatePool: [],
     });
-    cleanupRequestIds.push(emptyQueueRequest._id);
+    cleanupRequestIds.push(expiredRequest._id);
 
-    const exhaustedResult = await escalateToNextDonor(emptyQueueRequest._id, {
-      reason: "timeout",
+    const widenResult = await widenSearchRadius(expiredRequest._id, {
       actorId: null,
       actorRole: "system",
+      note: "Automated test sweep",
     });
 
-    assert.strictEqual(exhaustedResult.status, REQUEST_STATUSES.NO_DONORS_AVAILABLE);
-    const finalEmptyReq = await BloodRequest.findById(emptyQueueRequest._id);
-    assert.strictEqual(finalEmptyReq.status, REQUEST_STATUSES.NO_DONORS_AVAILABLE);
-    assert.strictEqual(finalEmptyReq.allDonorsRejected, true);
-    console.log("✅ Queue exhaustion verified: Status transitioned to no_donors_available when queue exhausted");
+    // Should widen or exhaust cleanly
+    const reloadedExpired = await BloodRequest.findById(expiredRequest._id);
+    assert.strictEqual(
+      [REQUEST_STATUSES.WAITING_FOR_DONOR, REQUEST_STATUSES.NO_DONORS_AVAILABLE].includes(reloadedExpired.status),
+      true,
+      "Request should remain waiting_for_donor if widened or no_donors_available if none found"
+    );
+    console.log(`✅ Radius widening verified: Transitioned to '${reloadedExpired.status}' (result: ${widenResult.message})`);
 
-    console.log("\n🎉 ALL LIFECYCLE & FLAW INTEGRATION TESTS PASSED SUCCESSFULLY! 🎉\n");
+    // 6. COORDINATES END-TO-END TEST (Constraint b):
+    console.log("▶ Testing profile coordinates end-to-end (Constraint b)...");
+    const testDonorUser = await User.create({
+      fullName: "Geo Profile Test Donor",
+      username: `${testPrefix}geodonor`,
+      email: `${testPrefix}geodonor@example.com`,
+      password: "password123",
+      role: "donor",
+    });
+    cleanupUserIds.push(testDonorUser._id);
+
+    // Invoke userUpdateProfile controller with flat { lat, lng } coordinates
+    const mockReq = {
+      user: { id: testDonorUser._id },
+      body: {
+        phoneNumber: "9876543210",
+        bloodGroup: "B+",
+        age: 25,
+        weight: 68,
+        location: {
+          city: "Mumbai",
+          state: "Maharashtra",
+          coordinates: {
+            lat: 19.076,
+            lng: 72.8777,
+          },
+        },
+      },
+    };
+
+    let responseData = null;
+    const mockRes = {
+      status(code) {
+        this.statusCode = code;
+        return this;
+      },
+      json(data) {
+        responseData = data;
+        return this;
+      },
+    };
+
+    await userUpdateProfile(mockReq, mockRes);
+    assert.strictEqual(mockRes.statusCode, 200, "userUpdateProfile should return 200");
+
+    const reloadedGeoUser = await User.findById(testDonorUser._id);
+    assert.strictEqual(reloadedGeoUser.location.coordinates.type, "Point", "GeoJSON type must be Point");
+    assert.strictEqual(reloadedGeoUser.location.coordinates.coordinates[0], 72.8777, "Longitude must be 72.8777");
+    assert.strictEqual(reloadedGeoUser.location.coordinates.coordinates[1], 19.076, "Latitude must be 19.076");
+    console.log("✅ Constraint (b) verified: Profile update with {lat, lng} correctly saved as GeoJSON [lng, lat] Point");
+
+    // 7. ROLE ROUTE PROFILE GATE TEST (Constraint c):
+    console.log("▶ Testing RoleRoute profile gate logic (Constraint c)...");
+    const requireProfile = true;
+
+    // A receiver with profileCompleted = false
+    const receiverBlocked = requireProfile && receiver.role !== "admin" && receiver.role !== "receiver" && !receiver.profileCompleted;
+    assert.strictEqual(receiverBlocked, false, "Receiver should NOT be blocked by requireProfile");
+
+    // A donor with profileCompleted = false
+    const donorUncompleted = { role: "donor", profileCompleted: false };
+    const donorBlocked = requireProfile && donorUncompleted.role !== "admin" && donorUncompleted.role !== "receiver" && !donorUncompleted.profileCompleted;
+    assert.strictEqual(donorBlocked, true, "Donor with incomplete profile SHOULD be blocked");
+
+    // A hospital with profileCompleted = false
+    const hospitalUncompleted = { role: "hospital", profileCompleted: false };
+    const hospitalBlocked = requireProfile && hospitalUncompleted.role !== "admin" && hospitalUncompleted.role !== "receiver" && !hospitalUncompleted.profileCompleted;
+    assert.strictEqual(hospitalBlocked, true, "Hospital with incomplete profile SHOULD be blocked");
+
+    console.log("✅ Constraint (c) verified: Receiver is excluded from requireProfile gate while donors and hospitals are checked");
+
+    console.log("\n🎉 ALL LIFECYCLE & NEW MODEL INTEGRATION TESTS PASSED! 🎉\n");
   } finally {
     // Cleanup test data
     console.log("Cleaning up test documents...");

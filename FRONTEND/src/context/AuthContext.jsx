@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
-
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+import { API_BASE } from "../config/api";
+import { normalizeUser } from "../utils/roleAccess";
 
 const AuthContext = createContext(null);
 
@@ -16,7 +16,7 @@ export function AuthProvider({ children }) {
       signal: controller.signal,
     })
       .then((res) => (res.ok ? res.json() : null))
-      .then((data) => setUser(data?.user ?? null))
+      .then((data) => setUser(normalizeUser(data?.user)))
       .catch((err) => {
         if (err.name !== "AbortError") setUser(null);
       })
@@ -25,7 +25,7 @@ export function AuthProvider({ children }) {
     return () => controller.abort();
   }, []);
 
-  const login = (userData) => setUser(userData);
+  const login = (userData) => setUser(normalizeUser(userData));
 
   const logout = async () => {
     try {

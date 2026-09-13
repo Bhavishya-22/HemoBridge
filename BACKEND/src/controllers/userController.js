@@ -65,7 +65,8 @@ exports.userRegister = asyncHandler(async (req, res) => {
         fullName: fullName.trim(),
         email: email.toLowerCase().trim(),
         password,
-        role: userRole
+        role: userRole,
+        isVerified: true
     });
 
     const { accessToken, refreshToken } = await generateAccessandRefreshTokens(newUser._id);
@@ -283,35 +284,52 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
 // Updates user profile fields and marks profile as completed.
 // Excludes password and refreshToken from response.
 exports.userUpdateProfile = asyncHandler(async (req, res) => {
-    const { phoneNumber, bloodGroup, age, weight, diseases, location } = req.body;
+    const { phoneNumber, bloodGroup, age, weight, diseases, location, role } = req.body;
 
     const user = await User.findById(req.user.id);
 
-    // Build update object safely
     const updateData = {
         phoneNumber,
         bloodGroup,
         age,
         weight,
         diseases,
-        profileCompleted: true
+        profileCompleted: true,
+        isVerified: true
     };
 
-    // ✅ ONLY update location if valid GeoJSON exists
-    if (
-        location &&
-        location.coordinates &&
-        Array.isArray(location.coordinates.coordinates) &&
-        location.coordinates.coordinates.length === 2
-    ) {
+    const validRoles = ["donor", "receiver", "hospital"];
+    if (role && validRoles.includes(role) && user.role !== "admin") {
+        updateData.role = role;
+    }
+
+    if (location) {
+        const existingLocation =
+            user.location && typeof user.location.toObject === "function"
+                ? user.location.toObject()
+                : user.location || {};
+
         updateData.location = {
+            ...existingLocation,
             city: location.city || "",
             state: location.state || "",
-            coordinates: {
+        };
+
+        if (location.coordinates?.lat != null && location.coordinates?.lng != null) {
+            updateData.location.coordinates = {
+                type: "Point",
+                coordinates: [Number(location.coordinates.lng), Number(location.coordinates.lat)]
+            };
+        } else if (
+            location.coordinates &&
+            Array.isArray(location.coordinates.coordinates) &&
+            location.coordinates.coordinates.length === 2
+        ) {
+            updateData.location.coordinates = {
                 type: "Point",
                 coordinates: location.coordinates.coordinates
-            }
-        };
+            };
+        }
     }
 
     const updatedUser = await User.findByIdAndUpdate(

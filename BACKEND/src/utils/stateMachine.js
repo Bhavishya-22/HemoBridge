@@ -1,12 +1,15 @@
 /**
  * Centralized State Machine for Blood Request Lifecycles
+ *
+ * DONOR_ACCEPTED has been removed (Part C-4). It was a legacy alias for MATCHED
+ * with identical downstream transitions. MATCHED is now the single canonical status
+ * that follows a donor accepting a request.
  */
 
 const REQUEST_STATUSES = Object.freeze({
   PENDING_HOSPITAL_APPROVAL: "pending_hospital_approval",
   HOSPITAL_APPROVED: "hospital_approved",
   WAITING_FOR_DONOR: "waiting_for_donor",
-  DONOR_ACCEPTED: "donor_accepted",
   MATCHED: "matched",
   NO_DONORS_AVAILABLE: "no_donors_available",
   BLOOD_TESTING: "blood_testing",
@@ -35,9 +38,8 @@ const ALLOWED_TRANSITIONS = Object.freeze({
     REQUEST_STATUSES.REJECTED,
   ],
   [REQUEST_STATUSES.WAITING_FOR_DONOR]: [
-    REQUEST_STATUSES.WAITING_FOR_DONOR, // internal re-allocation/escalation
-    REQUEST_STATUSES.MATCHED,
-    REQUEST_STATUSES.DONOR_ACCEPTED,   // legacy alias support
+    REQUEST_STATUSES.WAITING_FOR_DONOR, // self-transition: radius widening re-broadcasts without status change
+    REQUEST_STATUSES.MATCHED,           // donor accepts (atomic)
     REQUEST_STATUSES.NO_DONORS_AVAILABLE,
     REQUEST_STATUSES.CANCELLED,
   ],
@@ -46,13 +48,8 @@ const ALLOWED_TRANSITIONS = Object.freeze({
     REQUEST_STATUSES.ADMIN_VERIFIED,
     REQUEST_STATUSES.BLOOD_TEST_SCHEDULED,
     REQUEST_STATUSES.FINAL_COMPLETED,
-    REQUEST_STATUSES.WAITING_FOR_DONOR, // if donor cancels before test, can re-enter queue
-    REQUEST_STATUSES.CANCELLED,
-  ],
-  [REQUEST_STATUSES.DONOR_ACCEPTED]: [
-    REQUEST_STATUSES.MATCHED,
-    REQUEST_STATUSES.ADMIN_VERIFIED,
-    REQUEST_STATUSES.BLOOD_TEST_SCHEDULED,
+    REQUEST_STATUSES.HOSPITAL_APPROVED,  // blood test fails, no fallback acceptors — re-broadcast
+    REQUEST_STATUSES.WAITING_FOR_DONOR,  // confirmed donor cancels before test — re-open to candidates
     REQUEST_STATUSES.CANCELLED,
   ],
   [REQUEST_STATUSES.ADMIN_VERIFIED]: [
@@ -61,12 +58,14 @@ const ALLOWED_TRANSITIONS = Object.freeze({
   ],
   [REQUEST_STATUSES.BLOOD_TEST_SCHEDULED]: [
     REQUEST_STATUSES.FINAL_COMPLETED,
-    REQUEST_STATUSES.WAITING_FOR_DONOR, // if blood test fails and loops back
-    REQUEST_STATUSES.HOSPITAL_APPROVED,
+    REQUEST_STATUSES.BLOOD_TEST_SCHEDULED, // blood test fails, backup promoted to test next
+    REQUEST_STATUSES.MATCHED,             // blood test fails, fallback to another acceptor
+    REQUEST_STATUSES.WAITING_FOR_DONOR,   // all acceptors exhausted — re-broadcast to new candidates
+    REQUEST_STATUSES.HOSPITAL_APPROVED,   // all acceptors exhausted — hospital fallback
     REQUEST_STATUSES.CANCELLED,
   ],
   [REQUEST_STATUSES.NO_DONORS_AVAILABLE]: [
-    REQUEST_STATUSES.WAITING_FOR_DONOR, // if new donors register or retry search
+    REQUEST_STATUSES.WAITING_FOR_DONOR, // admin manually triggers re-broadcast / new donors registered
     REQUEST_STATUSES.CANCELLED,
   ],
   [REQUEST_STATUSES.FINAL_COMPLETED]: [],
@@ -76,8 +75,8 @@ const ALLOWED_TRANSITIONS = Object.freeze({
 
 /**
  * Check if transition from currentStatus to nextStatus is permitted.
- * @param {string} currentStatus 
- * @param {string} nextStatus 
+ * @param {string} currentStatus
+ * @param {string} nextStatus
  * @returns {boolean}
  */
 function canTransition(currentStatus, nextStatus) {
@@ -89,8 +88,8 @@ function canTransition(currentStatus, nextStatus) {
 
 /**
  * Validate status transition and throw error if invalid.
- * @param {string} currentStatus 
- * @param {string} nextStatus 
+ * @param {string} currentStatus
+ * @param {string} nextStatus
  * @throws {Error} If transition is not allowed
  */
 function validateTransition(currentStatus, nextStatus) {

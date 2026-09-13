@@ -1,18 +1,12 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { getNavLinksForRole } from "../../utils/roleAccess";
 import "../styles/navbar.css";
-
-const links = [
-  { name: "Home", path: "/" },
-  { name: "Request Blood", path: "/request" },
-  { name: "Donate Blood", path: "/donate" },
-  { name: "FAQ", path: "/faq" },
-  { name: "Profile", path: "/profile" },
-];
 
 export default function Navbar() {
   const navigate = useNavigate();
-  const { isLoggedIn, checkingAuth, logout } = useAuth();
+  const { user, isLoggedIn, checkingAuth, logout } = useAuth();
+  const links = getNavLinksForRole(user?.role, isLoggedIn);
 
   const handleLogout = async () => {
     await logout();

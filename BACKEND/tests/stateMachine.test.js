@@ -40,6 +40,16 @@ assert.strictEqual(
   canTransition(REQUEST_STATUSES.BLOOD_TEST_SCHEDULED, REQUEST_STATUSES.FINAL_COMPLETED),
   true
 );
+assert.strictEqual(
+  canTransition(REQUEST_STATUSES.BLOOD_TEST_SCHEDULED, REQUEST_STATUSES.BLOOD_TEST_SCHEDULED),
+  true,
+  "Must allow blood_test_scheduled self-transition when next backup donor is tested"
+);
+assert.strictEqual(
+  canTransition(REQUEST_STATUSES.BLOOD_TEST_SCHEDULED, REQUEST_STATUSES.WAITING_FOR_DONOR),
+  true,
+  "Must allow transition back to waiting_for_donor when all backups exhaust and rebroadcast begins"
+);
 
 // Invalid transitions
 assert.strictEqual(

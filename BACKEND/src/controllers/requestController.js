@@ -7,12 +7,18 @@ const User = require("../model/userModel");
 const AuditLog = require("../model/auditLogModel");
 const { getRecipientsForDonor } = require("../utils/bloodCompatibility");
 const { REQUEST_STATUSES } = require("../utils/stateMachine");
-const { escalateToNextDonor } = require("../utils/donorSelectionService");
+const {
+  widenSearchRadius,
+  selectNearestAcceptedDonor,
+  parseCoordinates,
+  calculateHaversineDistanceKm,
+  DEFAULT_MAX_DISTANCE_KM,
+} = require("../utils/donorSelectionService");
 const { logAuditEvent } = require("../utils/auditLogger");
 
 /**
  * STEP 1: Receiver creates blood request.
- * Creates request in status "pending_hospital_approval" and writes audit log.
+ * Part C-1: accepts location.coordinates.{lat,lng} from body and passes through to schema.
  */
 exports.createRequest = asyncHandler(async (req, res) => {
   const { bloodGroup, quantity, emergencyLevel, location, hospitalName, description } = req.body;
@@ -32,6 +38,8 @@ exports.createRequest = asyncHandler(async (req, res) => {
     });
   }
 
+  // location.coordinates.{lat, lng} is stored as-received; parseCoordinates() in the
+  // donor selection service handles both flat {lat,lng} and GeoJSON formats for geo queries.
   const request = await BloodRequest.create({
     requestedBy: req.user.id,
     bloodGroup: bloodGroup.toUpperCase(),
@@ -43,7 +51,6 @@ exports.createRequest = asyncHandler(async (req, res) => {
     status: REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL,
   });
 
-  // Write audit log
   await logAuditEvent({
     requestId: request._id,
     actor: req.user.id,
@@ -55,6 +62,7 @@ exports.createRequest = asyncHandler(async (req, res) => {
       bloodGroup: request.bloodGroup,
       quantity: request.quantity,
       emergencyLevel: request.emergencyLevel,
+      hasCoordinates: !!(location?.coordinates?.lat && location?.coordinates?.lng),
       location,
     },
     note: "Receiver submitted new blood request awaiting hospital verification",
@@ -74,7 +82,14 @@ exports.createRequest = asyncHandler(async (req, res) => {
 });
 
 /**
- * Donor views hospital-approved or waiting-for-donor requests compatible with their blood group.
+ * Donor views open, compatible blood requests they can accept.
+ *
+ * Decision 5 (Gap item 5): Returns requests in waiting_for_donor where the donor is
+ * in candidatePool OR where the request is within DEFAULT_MAX_DISTANCE_KM (so donors
+ * who registered after a broadcast can still find nearby open requests). Results sorted
+ * by distance ascending when the donor has geo coordinates.
+ *
+ * Donors who have declined a request are excluded from that request's results.
  */
 exports.viewRequests = asyncHandler(async (req, res) => {
   const user = await User.findById(req.user.id);
@@ -88,39 +103,85 @@ exports.viewRequests = asyncHandler(async (req, res) => {
     });
   }
 
-  // Determine which recipient blood groups this donor can donate to
+  const donorId = new mongoose.Types.ObjectId(req.user.id);
   const compatibleRecipientGroups = getRecipientsForDonor(user.bloodGroup);
 
-  const requests = await BloodRequest.find({
-    status: {
-      $in: [
-        REQUEST_STATUSES.WAITING_FOR_DONOR,
-        REQUEST_STATUSES.MATCHED,
-        REQUEST_STATUSES.DONOR_ACCEPTED,
-      ],
-    },
-    bloodGroup: {
-      $in: compatibleRecipientGroups,
-    },
+  // Query all open requests matching compatible recipient groups that this donor hasn't rejected
+  const openRequests = await BloodRequest.find({
+    status: REQUEST_STATUSES.WAITING_FOR_DONOR,
+    bloodGroup: { $in: compatibleRecipientGroups },
+    "rejectedDonors.donor": { $ne: donorId },
   })
-    .populate("requestedBy", "fullName location")
-    .sort({ createdAt: -1 });
+    .populate("requestedBy", "fullName location email phoneNumber")
+    .populate("assignedHospital", "hospitalName fullName")
+    .lean();
 
-  res.status(200).json({
+  const donorCoords = parseCoordinates(user.location);
+  const donorCity = user.location?.city?.toLowerCase()?.trim();
+  const donorState = user.location?.state?.toLowerCase()?.trim();
+
+  // Calculate distance for each request
+  const requestsWithDistance = openRequests.map((reqDoc) => {
+    let distanceKm = null;
+    const reqCoords = parseCoordinates(reqDoc.location);
+
+    if (donorCoords && reqCoords) {
+      // donorCoords: [lng, lat], reqCoords: [lng, lat]
+      distanceKm = calculateHaversineDistanceKm(
+        donorCoords[1],
+        donorCoords[0],
+        reqCoords[1],
+        reqCoords[0]
+      );
+    } else if (reqDoc.candidatePool && reqDoc.candidatePool.length > 0) {
+      const poolEntry = reqDoc.candidatePool.find(
+        (p) => (p.donor?._id || p.donor)?.toString() === donorId.toString()
+      );
+      if (poolEntry && typeof poolEntry.distanceKm === "number") {
+        distanceKm = poolEntry.distanceKm;
+      }
+    }
+
+    if (distanceKm == null) {
+      const reqCity = reqDoc.location?.city?.toLowerCase()?.trim();
+      const reqState = reqDoc.location?.state?.toLowerCase()?.trim();
+      if (reqCity && donorCity && reqCity === donorCity) {
+        distanceKm = 4.5;
+      } else if (reqState && donorState && reqState === donorState) {
+        distanceKm = 24.0;
+      } else {
+        distanceKm = 35.0;
+      }
+    }
+
+    return {
+      ...reqDoc,
+      distanceKm: Math.round(distanceKm * 10) / 10,
+      distanceFromDonorKm: Math.round(distanceKm * 10) / 10,
+    };
+  });
+
+  // Sort strictly nearest first (ascending distance)
+  requestsWithDistance.sort(
+    (a, b) => (a.distanceKm ?? 9999) - (b.distanceKm ?? 9999)
+  );
+
+  return res.status(200).json({
     success: true,
-    totalRequests: requests.length,
-    requests,
+    totalRequests: requestsWithDistance.length,
+    requests: requestsWithDistance,
   });
 });
 
 /**
  * Receiver views their own requests.
+ * Part A-9: populated field renamed from selectedDonor to confirmedDonor.
  */
 exports.myRequests = asyncHandler(async (req, res) => {
   const requests = await BloodRequest.find({
     requestedBy: req.user.id,
   })
-    .populate("selectedDonor", "fullName email phoneNumber bloodGroup")
+    .populate("confirmedDonor", "fullName email phoneNumber bloodGroup")
     .populate("assignedHospital", "fullName hospitalName hospitalPhone")
     .sort({ createdAt: -1 });
 
@@ -149,7 +210,8 @@ exports.getHospitalRequests = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get request detail with check-on-read timeout evaluation.
+ * Get request detail. Part A-9: replaced selectedDonor/currentDonorIndex with
+ * confirmedDonor/candidatePool fields. Removed check-on-read escalation (worker handles it).
  */
 exports.getRequestDetail = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
@@ -161,9 +223,9 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
     });
   }
 
-  let request = await BloodRequest.findById(requestId)
+  const request = await BloodRequest.findById(requestId)
     .populate("requestedBy", "fullName email phoneNumber location age bloodGroup")
-    .populate("selectedDonor", "fullName email phoneNumber bloodGroup location")
+    .populate("confirmedDonor", "fullName email phoneNumber bloodGroup location")
     .populate("assignedHospital", "fullName hospitalName hospitalPhone");
 
   if (!request) {
@@ -171,25 +233,6 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
       success: false,
       message: "Blood request not found",
     });
-  }
-
-  // Check-on-read: If donor deadline passed while waiting for donor, trigger escalation immediately
-  if (
-    request.status === REQUEST_STATUSES.WAITING_FOR_DONOR &&
-    request.donorResponseDeadline &&
-    request.donorResponseDeadline < new Date()
-  ) {
-    await escalateToNextDonor(request._id, {
-      reason: "timeout",
-      actorId: null,
-      actorRole: "system",
-      note: "Check-on-read: donor response deadline elapsed",
-    });
-    // Re-fetch updated request
-    request = await BloodRequest.findById(requestId)
-      .populate("requestedBy", "fullName email phoneNumber location age bloodGroup")
-      .populate("selectedDonor", "fullName email phoneNumber bloodGroup location")
-      .populate("assignedHospital", "fullName hospitalName hospitalPhone");
   }
 
   return res.status(200).json({
@@ -204,10 +247,13 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
       hospitalApproved: request.hospitalApproved,
       hospitalApprovedAt: request.hospitalApprovedAt,
       assignedHospital: request.assignedHospital,
-      selectedDonor: request.selectedDonor,
-      donorResponseDeadline: request.donorResponseDeadline,
-      currentDonorIndex: request.currentDonorIndex,
-      totalQueuedDonors: request.donorQueue?.length || 0,
+      confirmedDonor: request.confirmedDonor,
+      confirmedDonorDistanceKm: request.confirmedDonorDistanceKm,
+      acceptanceDeadline: request.acceptanceDeadline,
+      donorSelectionDeadline: request.donorSelectionDeadline,
+      totalAcceptedDonors: request.acceptedDonors?.length || 0,
+      candidatePoolSize: request.candidatePool?.length || 0,
+      radiusWideningApplied: request.radiusWideningApplied,
       bloodTestResult: request.bloodTestResult,
       createdAt: request.createdAt,
     },
@@ -215,7 +261,10 @@ exports.getRequestDetail = asyncHandler(async (req, res) => {
 });
 
 /**
- * On-demand timeout check & escalation endpoint.
+ * On-demand timeout check & radius widening endpoint.
+ * Supports both:
+ *  1. Expired collection window with acceptances -> triggers selectNearestAcceptedDonor
+ *  2. Expired broadcast deadline with zero acceptances -> triggers widenSearchRadius
  */
 exports.checkTimeout = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
@@ -239,39 +288,65 @@ exports.checkTimeout = asyncHandler(async (req, res) => {
   if (request.status !== REQUEST_STATUSES.WAITING_FOR_DONOR) {
     return res.status(200).json({
       success: true,
-      escalated: false,
+      widened: false,
       message: `Request is in status '${request.status}', not waiting for donor.`,
       status: request.status,
     });
   }
 
-  if (request.donorResponseDeadline && request.donorResponseDeadline < new Date()) {
-    const result = await escalateToNextDonor(requestId, {
-      reason: "timeout",
+  const now = new Date();
+
+  // Branch 1: If collection window has expired and we have acceptances, finalize selection
+  if (
+    request.donorSelectionDeadline &&
+    request.donorSelectionDeadline <= now &&
+    request.acceptedDonors &&
+    request.acceptedDonors.length > 0
+  ) {
+    const selectResult = await selectNearestAcceptedDonor(requestId);
+    return res.status(200).json({
+      success: true,
+      widened: false,
+      selectionCompleted: true,
+      message: selectResult.message,
+      status: selectResult.status,
+      primaryDonorId: selectResult.primaryDonorId,
+      backupsCount: selectResult.backupsCount,
+    });
+  }
+
+  // Branch 2: If acceptance broadcast deadline has passed and no donors accepted, widen radius
+  if (
+    request.acceptanceDeadline &&
+    request.acceptanceDeadline < now &&
+    (!request.acceptedDonors || request.acceptedDonors.length === 0)
+  ) {
+    const result = await widenSearchRadius(requestId, {
       actorId: req.user?.id || null,
       actorRole: req.user?.role || "system",
-      note: "Explicit timeout check triggered escalation",
+      note: "Explicit timeout check triggered radius widening",
     });
 
     return res.status(200).json({
       success: true,
-      escalated: true,
+      widened: true,
       message: result.message,
       status: result.status,
-      nextDonorId: result.nextDonorId,
+      newCandidatesCount: result.newCandidatesCount,
     });
   }
 
-  const remainingMs = request.donorResponseDeadline
-    ? request.donorResponseDeadline.getTime() - Date.now()
+  const remainingMs = request.acceptanceDeadline
+    ? request.acceptanceDeadline.getTime() - Date.now()
     : 0;
 
   return res.status(200).json({
     success: true,
-    escalated: false,
-    message: "Response window has not yet expired.",
+    widened: false,
+    message: "Acceptance window has not yet expired.",
     remainingSeconds: Math.max(0, Math.round(remainingMs / 1000)),
-    deadline: request.donorResponseDeadline,
+    deadline: request.acceptanceDeadline,
+    donorSelectionDeadline: request.donorSelectionDeadline,
     status: request.status,
   });
 });

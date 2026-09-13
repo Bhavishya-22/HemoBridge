@@ -6,16 +6,25 @@ const Notification = require("../model/notificationModel");
 const User = require("../model/userModel");
 const {
   findAndRankEligibleDonors,
-  notifySelectedDonor,
+  broadcastToEligibleDonors,       // Part A-4: replaces notifySelectedDonor
   getResponseTimeoutMs,
+  DEFAULT_MAX_DISTANCE_KM,
 } = require("../utils/donorSelectionService");
 const { REQUEST_STATUSES, validateTransition } = require("../utils/stateMachine");
 const { logAuditEvent } = require("../utils/auditLogger");
 
 /**
- * STEP 2: Hospital approves the blood request (Fraud/Fake-request checkpoint).
- * Automatically finds eligible donors via 2dsphere geo-index, notifies the single nearest donor,
- * queues the next-nearest donors in "held" status, and logs audit events.
+ * STEP 2: Hospital approves the blood request (fraud/fake-request checkpoint).
+ *
+ * Part A-3/4 redesign: instead of selecting the single nearest donor and queuing
+ * the rest, the backend now:
+ *  1. Finds ALL eligible donors within DEFAULT_MAX_DISTANCE_KM.
+ *  2. Stores them as an open candidatePool — no single donor is pre-selected.
+ *  3. Broadcasts a notification to EVERY candidate inviting them to accept.
+ *  4. Transitions to waiting_for_donor with an acceptanceDeadline.
+ *
+ * Any candidate who sees the request on their dashboard and accepts it triggers
+ * the atomic match in acceptController.
  */
 exports.approveBloodRequest = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
@@ -37,7 +46,6 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  // Enforce checkpoint: must be in pending_hospital_approval
   if (request.status !== REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL) {
     return res.status(400).json({
       success: false,
@@ -53,8 +61,6 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
   }
 
   const previousStatus = request.status;
-
-  // Validate state machine transition to hospital_approved
   validateTransition(previousStatus, REQUEST_STATUSES.HOSPITAL_APPROVED);
 
   request.hospitalApproved = true;
@@ -63,7 +69,6 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
   request.assignedHospital = hospitalId;
   request.status = REQUEST_STATUSES.HOSPITAL_APPROVED;
 
-  // Log hospital approval audit event
   await logAuditEvent({
     requestId: request._id,
     actor: hospitalId,
@@ -75,24 +80,19 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
     note: "Hospital verified and approved blood request as authentic",
   });
 
-  // STEP 3: Automatically find and rank eligible donors using MongoDB 2dsphere index ($geoNear)
+  // ── Find all eligible donors within broadcast radius ─────────────────────
   const rankedDonors = await findAndRankEligibleDonors(request, {
-    limit: 10,
-    maxDistanceKm: 50,
+    limit: 50,
+    maxDistanceKm: DEFAULT_MAX_DISTANCE_KM,
   });
 
   if (rankedDonors.length === 0) {
-    // No eligible donors available in vicinity
     validateTransition(request.status, REQUEST_STATUSES.NO_DONORS_AVAILABLE);
     request.status = REQUEST_STATUSES.NO_DONORS_AVAILABLE;
-    request.donorQueue = [];
-    request.currentDonorIndex = 0;
-    request.selectedDonor = null;
-    request.allDonorsRejected = true;
+    request.candidatePool = [];
 
     await request.save();
 
-    // Notify receiver
     await Notification.create({
       recipientId: request.requestedBy,
       relatedRequest: request._id,
@@ -101,7 +101,6 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
       message: `Your request was approved by the hospital, but no eligible nearby donors are currently available. Please contact hospital staff.`,
     });
 
-    // Notify admins (Fix: query actual admin users instead of placeholder)
     const admins = await User.find({ role: "admin" }).select("_id");
     for (const admin of admins) {
       await Notification.create({
@@ -109,7 +108,7 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
         type: "no_donors_available",
         relatedRequest: request._id,
         priority: "high",
-        message: `Approved request ${request._id} (${request.bloodGroup}) has no available donors nearby.`,
+        message: `Approved request ${request._id} (${request.bloodGroup}) has no available donors within ${DEFAULT_MAX_DISTANCE_KM} km.`,
       });
     }
 
@@ -120,7 +119,7 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
       action: "NO_DONORS_AVAILABLE",
       previousStatus: REQUEST_STATUSES.HOSPITAL_APPROVED,
       newStatus: REQUEST_STATUSES.NO_DONORS_AVAILABLE,
-      metadata: { searchRadiusKm: 50 },
+      metadata: { searchRadiusKm: DEFAULT_MAX_DISTANCE_KM },
       note: "No matching, verified, available donors found within search area",
     });
 
@@ -135,89 +134,81 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  // STEP 4: Build donorQueue with the nearest donor selected and remaining held
+  // ── Build candidatePool and open the acceptance window ───────────────────
   const timeoutMs = getResponseTimeoutMs(request.emergencyLevel);
   const deadline = new Date(Date.now() + timeoutMs);
 
-  const nearestDonorItem = rankedDonors[0];
-  const firstDonorId = nearestDonorItem.donor._id || nearestDonorItem.donor;
+  request.candidatePool = rankedDonors.map(({ donor, distanceKm }) => ({
+    donor: donor._id || donor,
+    distanceKm,
+    searchRadiusKm: DEFAULT_MAX_DISTANCE_KM,
+    addedAt: new Date(),
+  }));
 
-  request.donorQueue = rankedDonors.map((item, index) => {
-    const donorId = item.donor._id || item.donor;
-    const isFirst = index === 0;
-    return {
-      donor: donorId,
-      distanceKm: item.distanceKm,
-      sortedIndex: index,
-      queuedAt: new Date(),
-      notificationSentAt: isFirst ? new Date() : null,
-      responseDeadline: isFirst ? deadline : null,
-      status: isFirst ? "notified" : "held",
+  if (rankedDonors.length > 0) {
+    request.nearestDonor = {
+      donor: rankedDonors[0].donor._id || rankedDonors[0].donor,
+      distanceKm: rankedDonors[0].distanceKm,
     };
-  });
+  }
 
-  // Validate and advance state to waiting_for_donor
   validateTransition(request.status, REQUEST_STATUSES.WAITING_FOR_DONOR);
 
-  request.currentDonorIndex = 0;
-  request.selectedDonor = firstDonorId;
-  request.donorResponseDeadline = deadline;
   request.status = REQUEST_STATUSES.WAITING_FOR_DONOR;
+  request.acceptanceDeadline = deadline;
+  request.donorNotificationSent = true;
+  request.lastDonorNotifiedAt = new Date();
+  // confirmedDonor intentionally NOT set here — no donor is pre-selected
 
   await request.save();
 
-  // Notify the single nearest eligible donor first
-  await notifySelectedDonor(request, firstDonorId, deadline, nearestDonorItem.distanceKm);
+  // Broadcast to every candidate — all donors invited to accept
+  await broadcastToEligibleDonors(request, rankedDonors);
 
   // Notify receiver
   await Notification.create({
     recipientId: request.requestedBy,
     relatedRequest: request._id,
     type: "hospital_approved",
-    message: `Your blood request has been verified and approved by the hospital. Nearest donor notified!`,
+    message: `Your blood request has been verified and approved. ${rankedDonors.length} eligible donor(s) have been notified and can now accept your request.`,
   });
 
-  // Fix Flaw 3: Notify actual admin users instead of hardcoded literal string "ADMIN_ID_HERE"
+  // Notify admins
   const admins = await User.find({ role: "admin" }).select("_id");
   for (const admin of admins) {
     await Notification.create({
       recipientId: admin._id,
       type: "new_approved_request",
       relatedRequest: request._id,
-      message: `Hospital approved request for ${request.bloodGroup}. Automatically assigned nearest donor from ${rankedDonors.length} candidates.`,
+      message: `Hospital approved request for ${request.bloodGroup}. ${rankedDonors.length} candidates notified within ${DEFAULT_MAX_DISTANCE_KM} km.`,
       priority: "normal",
     });
   }
 
-  // Audit log for donor allocation
   await logAuditEvent({
     requestId: request._id,
     actor: hospitalId,
     actorRole: "hospital",
-    action: "DONOR_NOTIFIED",
+    action: "CANDIDATES_BROADCAST",
     previousStatus: REQUEST_STATUSES.HOSPITAL_APPROVED,
     newStatus: REQUEST_STATUSES.WAITING_FOR_DONOR,
     metadata: {
-      selectedDonorId: firstDonorId,
-      totalQueued: rankedDonors.length,
-      heldDonorsCount: rankedDonors.length - 1,
-      distanceKm: nearestDonorItem.distanceKm,
-      responseDeadline: deadline,
+      candidatePoolSize: rankedDonors.length,
+      searchRadiusKm: DEFAULT_MAX_DISTANCE_KM,
+      acceptanceDeadline: deadline,
     },
-    note: `Automatically notified nearest donor (${nearestDonorItem.distanceKm} km). Held ${rankedDonors.length - 1} next-nearest donors in queue.`,
+    note: `Broadcast to ${rankedDonors.length} eligible donors (radius: ${DEFAULT_MAX_DISTANCE_KM} km). Open acceptance window until ${deadline.toISOString()}.`,
   });
 
   return res.status(200).json({
     success: true,
-    message: "Blood request approved successfully. Nearest donor automatically notified.",
+    message: `Blood request approved. ${rankedDonors.length} eligible donor(s) notified and can now accept.`,
     data: {
       requestId: request._id,
       status: request.status,
-      selectedDonorId: firstDonorId,
-      distanceKm: nearestDonorItem.distanceKm,
-      responseDeadline: deadline,
-      totalDonorsInQueue: rankedDonors.length,
-      heldDonorsCount: rankedDonors.length - 1,
+      candidatePoolSize: rankedDonors.length,
+      acceptanceDeadline: deadline,
+      searchRadiusKm: DEFAULT_MAX_DISTANCE_KM,
     },
   });
 });
@@ -246,18 +237,16 @@ exports.rejectBloodRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  // Validate state transition
   validateTransition(request.status, REQUEST_STATUSES.REJECTED);
 
   const previousStatus = request.status;
   request.status = REQUEST_STATUSES.REJECTED;
   request.hospitalApproved = false;
-  request.selectedDonor = null;
-  request.donorResponseDeadline = null;
+  request.confirmedDonor = null;
+  request.acceptanceDeadline = null;
 
   await request.save();
 
-  // Notify receiver
   await Notification.create({
     recipientId: request.requestedBy,
     relatedRequest: request._id,
@@ -266,7 +255,6 @@ exports.rejectBloodRequest = asyncHandler(async (req, res) => {
     message: `Your blood request was rejected by the hospital.${rejectionReason ? ` Reason: ${rejectionReason}` : ""}`,
   });
 
-  // Write audit log
   await logAuditEvent({
     requestId: request._id,
     actor: hospitalId,

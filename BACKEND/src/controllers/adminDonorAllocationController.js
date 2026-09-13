@@ -4,11 +4,11 @@ const BloodRequest = require("../model/bloodRequestModel");
 const Notification = require("../model/notificationModel");
 const User = require("../model/userModel");
 const { REQUEST_STATUSES } = require("../utils/stateMachine");
-const { escalateToNextDonor } = require("../utils/donorSelectionService");
+const { widenSearchRadius } = require("../utils/donorSelectionService");
 
 /**
- * Admin manual override: manually escalate to the next donor in queue if necessary.
- * Utilizes the shared donorSelectionService.
+ * Admin manual override: manually trigger radius widening / re-broadcast.
+ * Utilizes the shared donorSelectionService widenSearchRadius.
  */
 exports.sendRequestToNextDonor = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
@@ -21,11 +21,10 @@ exports.sendRequestToNextDonor = asyncHandler(async (req, res) => {
     });
   }
 
-  const result = await escalateToNextDonor(requestId, {
-    reason: "admin_override",
+  const result = await widenSearchRadius(requestId, {
     actorId: adminId,
     actorRole: "admin",
-    note: "Admin manually triggered escalation to next donor",
+    note: "Admin manually triggered radius widening",
   });
 
   if (!result.success) {
@@ -41,13 +40,13 @@ exports.sendRequestToNextDonor = asyncHandler(async (req, res) => {
     data: {
       requestId,
       status: result.status,
-      nextDonorId: result.nextDonorId,
+      candidateCount: result.candidateCount,
     },
   });
 });
 
 /**
- * Get requests requiring administrative attention (e.g. no donors available or pending verification).
+ * Get requests requiring administrative attention (e.g. no donors available or pending hospital approval).
  */
 exports.getPendingAdminActions = asyncHandler(async (req, res) => {
   const requests = await BloodRequest.find({
@@ -56,7 +55,7 @@ exports.getPendingAdminActions = asyncHandler(async (req, res) => {
     },
   })
     .populate("requestedBy", "fullName bloodGroup location")
-    .populate("donorQueue.donor", "fullName location bloodGroup")
+    .populate("candidatePool.donor", "fullName location bloodGroup")
     .sort({ emergencyLevel: -1, createdAt: -1 });
 
   res.status(200).json({
@@ -68,7 +67,7 @@ exports.getPendingAdminActions = asyncHandler(async (req, res) => {
       bloodGroup: r.bloodGroup,
       quantity: r.quantity,
       emergencyLevel: r.emergencyLevel,
-      totalDonorsInQueue: r.donorQueue?.length || 0,
+      candidatePoolSize: r.candidatePool?.length || 0,
       status: r.status,
       createdAt: r.createdAt,
     })),
@@ -83,7 +82,7 @@ exports.getActiveRequests = asyncHandler(async (req, res) => {
     status: REQUEST_STATUSES.WAITING_FOR_DONOR,
   })
     .populate("requestedBy", "fullName location")
-    .populate("selectedDonor", "fullName location phoneNumber bloodGroup")
+    .populate("confirmedDonor", "fullName location phoneNumber bloodGroup")
     .sort({ updatedAt: -1 });
 
   res.status(200).json({
@@ -92,10 +91,10 @@ exports.getActiveRequests = asyncHandler(async (req, res) => {
     requests: requests.map((r) => ({
       requestId: r._id,
       receiver: r.requestedBy,
-      selectedDonor: r.selectedDonor,
+      confirmedDonor: r.confirmedDonor,
       bloodGroup: r.bloodGroup,
       emergencyLevel: r.emergencyLevel,
-      donorResponseDeadline: r.donorResponseDeadline,
+      acceptanceDeadline: r.acceptanceDeadline,
       waitingSince: r.updatedAt,
       status: r.status,
     })),
@@ -103,15 +102,15 @@ exports.getActiveRequests = asyncHandler(async (req, res) => {
 });
 
 /**
- * Get request details including full donor queue and held states.
+ * Get request details including full candidate pool.
  */
 exports.getRequestWithDonorQueue = asyncHandler(async (req, res) => {
   const { requestId } = req.params;
 
   const request = await BloodRequest.findById(requestId)
     .populate("requestedBy", "fullName email phoneNumber location")
-    .populate("donorQueue.donor", "fullName email phoneNumber location bloodGroup availabilityStatus")
-    .populate("selectedDonor", "fullName email phoneNumber bloodGroup");
+    .populate("candidatePool.donor", "fullName email phoneNumber location bloodGroup availabilityStatus")
+    .populate("confirmedDonor", "fullName email phoneNumber bloodGroup");
 
   if (!request) {
     return res.status(404).json({
@@ -119,6 +118,9 @@ exports.getRequestWithDonorQueue = asyncHandler(async (req, res) => {
       message: "Request not found",
     });
   }
+
+  const acceptedIds = new Set((request.acceptedDonors || []).map((a) => a.donor.toString()));
+  const rejectedIds = new Set((request.rejectedDonors || []).map((r) => r.donor.toString()));
 
   res.status(200).json({
     success: true,
@@ -131,19 +133,21 @@ exports.getRequestWithDonorQueue = asyncHandler(async (req, res) => {
         emergencyLevel: request.emergencyLevel,
         status: request.status,
         hospitalApprovedAt: request.hospitalApprovedAt,
-        donorResponseDeadline: request.donorResponseDeadline,
+        acceptanceDeadline: request.acceptanceDeadline,
       },
-      donorQueue: (request.donorQueue || []).map((item, index) => ({
-        queuePosition: index + 1,
-        donor: item.donor,
-        distanceKm: item.distanceKm,
-        status: item.status,
-        notificationSentAt: item.notificationSentAt,
-        responseDeadline: item.responseDeadline,
-        isCurrentDonor: index === request.currentDonorIndex,
-      })),
-      selectedDonor: request.selectedDonor,
-      currentDonorIndex: request.currentDonorIndex,
+      candidatePool: (request.candidatePool || []).map((item) => {
+        const donorIdStr = (item.donor?._id || item.donor).toString();
+        return {
+          donor: item.donor,
+          distanceKm: item.distanceKm,
+          searchRadiusKm: item.searchRadiusKm,
+          addedAt: item.addedAt,
+          hasAccepted: acceptedIds.has(donorIdStr),
+          hasDeclined: rejectedIds.has(donorIdStr),
+        };
+      }),
+      confirmedDonor: request.confirmedDonor,
+      acceptanceDeadline: request.acceptanceDeadline,
     },
   });
 });

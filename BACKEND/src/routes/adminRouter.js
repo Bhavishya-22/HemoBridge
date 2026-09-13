@@ -1,11 +1,11 @@
-﻿const express = require("express");
+const express = require("express");
 const adminRouter = express.Router();
 const adminVerificationController = require("../controllers/adminVerificationController");
 const authMiddleware = require("../middlewares/authMiddleware");
 const adminOnlyMiddleware = require("../middlewares/adminOnlyMiddleware");
 
 // All admin routes require auth + admin role
-adminRouter.use(authMiddleware, adminOnlyMiddleware);
+adminRouter.use("/admin", authMiddleware, adminOnlyMiddleware);
 
 // Dashboard data
 adminRouter.get("/admin/pending-hospitals", adminVerificationController.getPendingHospitals);

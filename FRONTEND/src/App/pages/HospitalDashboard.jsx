@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import "../styles/dashboard.css";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+import { API_BASE } from "../../config/api";
 
 export default function HospitalDashboard() {
   const { user, logout } = useAuth();
@@ -21,7 +21,7 @@ export default function HospitalDashboard() {
   useEffect(() => {
     const fetchPending = async () => {
       try {
-        const res = await fetch(`${API_BASE}/requests/hospital`, { credentials: "include" });
+        const res = await fetch(`${API_BASE}/hospital/requests`, { credentials: "include" });
         if (res.ok) {
           const d = await res.json();
           setPendingRequests(d.requests || []);
@@ -36,12 +36,19 @@ export default function HospitalDashboard() {
   }, []);
 
   const handleVerify = async (requestId, action) => {
+    const endpoint =
+      action === "approve"
+        ? `${API_BASE}/hospital/approve-request/${requestId}`
+        : `${API_BASE}/hospital/reject-request/${requestId}`;
+
     try {
-      const res = await fetch(`${API_BASE}/hospital/verify-request/${requestId}`, {
+      const res = await fetch(endpoint, {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify(
+          action === "reject" ? { rejectionReason: "Rejected by hospital" } : {}
+        ),
       });
       const data = await res.json();
       if (res.ok) {
@@ -70,12 +77,18 @@ export default function HospitalDashboard() {
       <aside className="dash-sidebar">
         <div className="dash-brand">
           <span className="dash-brand-icon">??</span>
-          <span className="dash-brand-name">Blood<span>Bank</span></span>
+          <span className="dash-brand-name">
+            Blood<span>Bank</span>
+          </span>
         </div>
         <nav className="dash-nav">
           <span className="dash-nav-label">Hospital Panel</span>
-          <a href="#overview" className="dash-nav-item active">?? Overview</a>
-          <a href="#requests" className="dash-nav-item">?? Pending Requests</a>
+          <a href="#overview" className="dash-nav-item active">
+            Overview
+          </a>
+          <a href="#requests" className="dash-nav-item">
+            Pending Requests
+          </a>
         </nav>
         <div className="dash-user-block">
           <div className="dash-avatar">??</div>
@@ -83,7 +96,9 @@ export default function HospitalDashboard() {
             <p className="dash-user-name">{user.hospitalName || user.fullName}</p>
             <p className="dash-user-role">Hospital</p>
           </div>
-          <button className="dash-logout-btn" onClick={handleLogout} title="Logout">?</button>
+          <button className="dash-logout-btn" onClick={handleLogout} title="Logout">
+            Logout
+          </button>
         </div>
       </aside>
       <main className="dash-main">
@@ -93,12 +108,13 @@ export default function HospitalDashboard() {
             <p className="dash-page-sub">Verify blood requests and manage donor matching.</p>
           </div>
           <div className={`dash-topbar-badge ${isVerified ? "verified-badge" : "pending-badge"}`}>
-            {isVerified ? "? Verified" : "? Verification Pending"}
+            {isVerified ? "Verified" : "Verification Pending"}
           </div>
         </header>
         {!isVerified && (
           <div className="dash-alert warning">
-            ?? Your hospital account is pending admin verification. You can view requests but cannot approve them until verified.
+            Your hospital account is pending admin verification. You can view requests but cannot
+            approve them until verified.
           </div>
         )}
         {actionMsg && <div className="dash-toast">{actionMsg}</div>}
@@ -114,16 +130,20 @@ export default function HospitalDashboard() {
             <span className="dash-stat-icon">??</span>
             <div>
               <p className="dash-stat-label">Hospital Status</p>
-              <p className="dash-stat-value" style={{ fontSize: "1rem" }}>{isVerified ? "Verified ?" : "Pending ?"}</p>
+              <p className="dash-stat-value" style={{ fontSize: "1rem" }}>
+                {isVerified ? "Verified" : "Pending"}
+              </p>
             </div>
           </div>
         </section>
         <section id="requests" className="dash-section">
-          <h2 className="dash-section-title">?? Blood Requests Awaiting Verification</h2>
+          <h2 className="dash-section-title">Blood Requests Awaiting Verification</h2>
           {loading ? (
-            <div className="dash-loading"><span className="dash-spinner" /></div>
+            <div className="dash-loading">
+              <span className="dash-spinner" />
+            </div>
           ) : pendingRequests.length === 0 ? (
-            <div className="dash-empty">No pending requests at the moment. ?</div>
+            <div className="dash-empty">No pending requests at the moment.</div>
           ) : (
             <div className="dash-table-wrap">
               <table className="dash-table">
@@ -140,22 +160,32 @@ export default function HospitalDashboard() {
                 <tbody>
                   {pendingRequests.map((r) => (
                     <tr key={r._id}>
-                      <td><span className="blood-badge">{r.bloodGroup}</span></td>
-                      <td>{r.quantity} unit{r.quantity > 1 ? "s" : ""}</td>
-                      <td><span className={`emergency-badge ${r.emergencyLevel}`}>{r.emergencyLevel}</span></td>
-                      <td>{r.requestedBy?.fullName || "—"}</td>
+                      <td>
+                        <span className="blood-badge">{r.bloodGroup}</span>
+                      </td>
+                      <td>
+                        {r.quantity} unit{r.quantity > 1 ? "s" : ""}
+                      </td>
+                      <td>
+                        <span className={`emergency-badge ${r.emergencyLevel}`}>{r.emergencyLevel}</span>
+                      </td>
+                      <td>{r.requestedBy?.fullName || "-"}</td>
                       <td>{new Date(r.createdAt).toLocaleDateString()}</td>
                       <td className="dash-actions">
                         <button
                           className="dash-btn approve"
                           onClick={() => handleVerify(r._id, "approve")}
                           disabled={!isVerified}
-                        >Approve</button>
+                        >
+                          Approve
+                        </button>
                         <button
                           className="dash-btn reject"
                           onClick={() => handleVerify(r._id, "reject")}
                           disabled={!isVerified}
-                        >Reject</button>
+                        >
+                          Reject
+                        </button>
                       </td>
                     </tr>
                   ))}

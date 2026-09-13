@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
+import { getRoleHomePath, normalizeUser } from "../../utils/roleAccess";
+import LocationPickerMap from "../../components/LocationPickerMap";
 import "../styles/profile.css";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+import { API_BASE } from "../../config/api";
 const BLOOD_GROUPS = ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 const ROLES = [
   { value: "donor", label: "Donor", icon: "💉" },
@@ -23,8 +26,10 @@ const EMPTY_FORM = {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const { login } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
+  const [coords, setCoords] = useState({ lat: null, lng: null, status: "idle" });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
@@ -33,6 +38,27 @@ export default function ProfilePage() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
   useEffect(() => {
+    // Acquire geolocation if supported
+    if (typeof navigator !== "undefined" && navigator.geolocation) {
+      setCoords((prev) => ({ ...prev, status: "acquiring" }));
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          setCoords({
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            status: "granted",
+          });
+        },
+        (err) => {
+          console.warn("Geolocation denied or error:", err.message);
+          setCoords((prev) => ({ ...prev, status: "denied" }));
+        },
+        { timeout: 8000 }
+      );
+    } else {
+      setCoords((prev) => ({ ...prev, status: "unavailable" }));
+    }
+
     const controller = new AbortController();
 
     const fetchProfile = async () => {
@@ -81,6 +107,14 @@ export default function ProfilePage() {
 
     setLoading(true);
     try {
+      const locationPayload = {
+        city,
+        state,
+        ...(coords.lat != null && coords.lng != null
+          ? { coordinates: { lat: coords.lat, lng: coords.lng } }
+          : {}),
+      };
+
       const res = await fetch(`${API_BASE}/user/update-profile`, {
         method: "POST",
         credentials: "include",
@@ -91,7 +125,7 @@ export default function ProfilePage() {
           age: Number(age),
           weight: Number(weight),
           role: form.role,
-          location: { city, state },
+          location: locationPayload,
           diseases: form.diseases
             ? form.diseases.split(",").map((d) => d.trim()).filter(Boolean)
             : [],
@@ -103,7 +137,9 @@ export default function ProfilePage() {
         setError(data.message || "Failed to save profile. Please try again.");
         return;
       }
-      navigate("/home");
+      const updatedUser = normalizeUser(data.user);
+      login(updatedUser);
+      navigate(getRoleHomePath(updatedUser?.role));
     } catch {
       setError("Unable to connect to server. Please try again later.");
     } finally {
@@ -249,6 +285,21 @@ export default function ProfilePage() {
             </div>
           </div>
 
+          <LocationPickerMap
+            initialLat={coords.lat}
+            initialLng={coords.lng}
+            onLocationChange={({ lat, lng, city, state }) => {
+              setCoords({ lat, lng, status: "granted" });
+              setForm((prev) => ({
+                ...prev,
+                city: city || prev.city,
+                state: state || prev.state,
+              }));
+            }}
+            label="Your Location (Map)"
+            height="260px"
+          />
+
           {/* Row: City + State */}
           <div className="form-row">
             <div className="field-group">
@@ -282,6 +333,13 @@ export default function ProfilePage() {
                 required
               />
             </div>
+          </div>
+
+          <div style={{ fontSize: "0.85rem", marginTop: "-0.5rem", marginBottom: "0.75rem", color: "#64748b" }}>
+            {coords.status === "acquiring" && "🔵 Detecting your location..."}
+            {coords.status === "granted" && `🟢 Exact Location Captured: ${coords.lat?.toFixed(4)}°, ${coords.lng?.toFixed(4)}°`}
+            {coords.status === "denied" && "🟡 Location access denied — map pin will be used."}
+            {coords.status === "unavailable" && "🟡 Geolocation unavailable — map pin will be used."}
           </div>
 
           {/* Diseases — optional */}
