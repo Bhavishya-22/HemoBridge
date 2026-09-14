@@ -62,53 +62,72 @@ exports.createRequest = asyncHandler(async (req, res) => {
   let resolvedHospitalId = null;
   let resolvedHospitalLocation = null;
 
-  if (mode === "remote") {
-    // Remote mode: receiver explicitly selected a hospital
-    if (!preferredHospitalId) {
-      return res.status(400).json({
-        success: false,
-        message: "Please select a hospital when submitting a remote request.",
-      });
-    }
+  if (preferredHospitalId && mongoose.Types.ObjectId.isValid(preferredHospitalId)) {
     const hospitalUser = await User.findById(preferredHospitalId);
-    if (!hospitalUser || hospitalUser.role !== "hospital" || !hospitalUser.hospitalVerified) {
-      return res.status(400).json({
-        success: false,
-        message: "The selected hospital is not valid or not verified by admin.",
-      });
+    if (hospitalUser && hospitalUser.role === "hospital" && hospitalUser.hospitalVerified) {
+      resolvedHospitalId = hospitalUser._id;
+      resolvedHospitalLocation = {
+        address: hospitalUser.hospitalAddress || hospitalLocation?.address || "",
+        city: hospitalUser.location?.city || hospitalLocation?.city || "",
+        state: hospitalUser.location?.state || hospitalLocation?.state || "",
+        coordinates: hospitalUser.location?.coordinates || hospitalLocation?.coordinates,
+      };
     }
-    resolvedHospitalId = hospitalUser._id;
-    // Store the hospital's location for audit purposes
-    resolvedHospitalLocation = hospitalLocation || {
-      city: hospitalUser.location?.city,
-      state: hospitalUser.location?.state,
-    };
-  } else {
-    // At-hospital mode: try to auto-match nearest verified hospital by coordinates
-    const patientCoords = location?.coordinates;
-    if (patientCoords?.lat != null && patientCoords?.lng != null) {
-      // Find the nearest verified hospital using city/state as a lightweight fallback
-      // (Full geo search would require a 2dsphere index on hospital location — use city match for now)
-      const patientCity = location?.city?.toLowerCase().trim();
-      const patientState = location?.state?.toLowerCase().trim();
+  }
 
-      const nearbyHospital = await User.findOne({
-        role: "hospital",
-        hospitalVerified: true,
-        $or: [
-          { "location.city": { $regex: new RegExp(`^${patientCity}$`, "i") } },
-          { "location.state": { $regex: new RegExp(`^${patientState}$`, "i") } },
-        ],
-      }).lean();
+  // If not resolved by explicit ID, match against verified hospitals by name & address/location
+  if (!resolvedHospitalId && (hospitalName || hospitalLocation)) {
+    const targetName = (hospitalName || "").trim().toLowerCase();
+    const targetCity = (hospitalLocation?.city || location?.city || "").trim().toLowerCase();
+    const targetState = (hospitalLocation?.state || location?.state || "").trim().toLowerCase();
+    const targetAddress = (hospitalLocation?.address || "").trim().toLowerCase();
 
-      if (nearbyHospital) {
-        resolvedHospitalId = nearbyHospital._id;
-        resolvedHospitalLocation = {
-          city: nearbyHospital.location?.city,
-          state: nearbyHospital.location?.state,
-        };
+    const allVerifiedHospitals = await User.find({
+      role: "hospital",
+      hospitalVerified: true,
+    }).lean();
+
+    const matched = allVerifiedHospitals.find((h) => {
+      const hName = (h.hospitalName || h.fullName || "").toLowerCase();
+      const hCity = (h.location?.city || "").toLowerCase();
+      const hState = (h.location?.state || "").toLowerCase();
+      const hAddr = (h.hospitalAddress || "").toLowerCase();
+
+      const nameMatches = targetName && (hName.includes(targetName) || targetName.includes(hName));
+
+      if (nameMatches) {
+        if (targetAddress && hAddr && (hAddr.includes(targetAddress) || targetAddress.includes(hAddr))) {
+          return true;
+        }
+        if (targetCity && hCity && targetCity === hCity) {
+          return true;
+        }
+        return true;
       }
-      // If no hospital found → resolvedHospitalId stays null → visible to all hospitals (fallback)
+
+      if (targetAddress && hAddr && (hAddr.includes(targetAddress) || targetAddress.includes(hAddr))) {
+        if (targetCity && hCity && targetCity === hCity) {
+          return true;
+        }
+      }
+
+      return false;
+    });
+
+    if (matched) {
+      resolvedHospitalId = matched._id;
+      resolvedHospitalLocation = {
+        address: matched.hospitalAddress || "",
+        city: matched.location?.city || "",
+        state: matched.location?.state || "",
+        coordinates: matched.location?.coordinates,
+      };
+    } else {
+      resolvedHospitalLocation = hospitalLocation || {
+        address: "",
+        city: location?.city || "",
+        state: location?.state || "",
+      };
     }
   }
 
@@ -298,22 +317,72 @@ exports.myRequests = asyncHandler(async (req, res) => {
  */
 exports.getHospitalRequests = asyncHandler(async (req, res) => {
   const hospitalId = new mongoose.Types.ObjectId(req.user.id);
+  const hospital = await User.findById(hospitalId);
 
-  const requests = await BloodRequest.find({
+  if (!hospital || hospital.role !== "hospital") {
+    return res.status(403).json({
+      success: false,
+      message: "Only hospitals can view hospital requests.",
+    });
+  }
+
+  const hName = (hospital.hospitalName || hospital.fullName || "").toLowerCase().trim();
+  const hCity = (hospital.location?.city || "").toLowerCase().trim();
+  const hState = (hospital.location?.state || "").toLowerCase().trim();
+  const hAddr = (hospital.hospitalAddress || "").toLowerCase().trim();
+
+  // Find all pending requests
+  const pendingRequests = await BloodRequest.find({
     status: REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL,
-    $or: [
-      { preferredHospital: hospitalId },   // explicitly designated to this hospital
-      { preferredHospital: null },          // unmatched — visible to all hospitals (fallback)
-    ],
   })
     .populate("requestedBy", "fullName email phoneNumber location")
-    .populate("preferredHospital", "hospitalName fullName")
+    .populate("preferredHospital", "hospitalName fullName hospitalAddress location")
     .sort({ emergencyLevel: -1, createdAt: -1 });
+
+  // STRICT HOSPITAL ROUTING ISOLATION:
+  // Hospital BB with address B must NEVER receive a blood request meant for Hospital AA with address A!
+  const filteredRequests = pendingRequests.filter((r) => {
+    // 1. Explicit match by ObjectId
+    if (r.preferredHospital) {
+      const prefId = (r.preferredHospital._id || r.preferredHospital).toString();
+      return prefId === hospitalId.toString();
+    }
+
+    // 2. Strict match by hospital name and address/city
+    const reqHospName = (r.hospitalName || "").toLowerCase().trim();
+    const reqHospCity = (r.hospitalLocation?.city || r.location?.city || "").toLowerCase().trim();
+    const reqHospState = (r.hospitalLocation?.state || r.location?.state || "").toLowerCase().trim();
+    const reqHospAddr = (r.hospitalLocation?.address || "").toLowerCase().trim();
+
+    if (reqHospName) {
+      const nameMatches = hName && (hName.includes(reqHospName) || reqHospName.includes(hName));
+      if (!nameMatches) {
+        return false;
+      }
+      if (reqHospAddr && hAddr) {
+        return hAddr.includes(reqHospAddr) || reqHospAddr.includes(hAddr);
+      }
+      if (reqHospCity && hCity) {
+        return reqHospCity === hCity;
+      }
+      return true;
+    }
+
+    // If no hospital name was given, only match if the city and state match
+    if (reqHospCity && hCity && reqHospCity === hCity) {
+      if (reqHospState && hState) {
+        return reqHospState === hState;
+      }
+      return true;
+    }
+
+    return false;
+  });
 
   res.status(200).json({
     success: true,
-    totalRequests: requests.length,
-    requests,
+    totalRequests: filteredRequests.length,
+    requests: filteredRequests,
   });
 });
 

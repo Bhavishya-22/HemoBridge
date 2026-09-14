@@ -14,6 +14,7 @@ const ROLES = [
 ];
 
 const EMPTY_FORM = {
+  fullName: "",
   phoneNumber: "",
   bloodGroup: "",
   age: "",
@@ -31,7 +32,7 @@ const EMPTY_FORM = {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, updateUser, refreshUser } = useAuth();
 
   const [form, setForm] = useState(EMPTY_FORM);
   const [coords, setCoords] = useState({ lat: null, lng: null, status: "idle" });
@@ -43,27 +44,6 @@ export default function ProfilePage() {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
 
   useEffect(() => {
-    // Acquire geolocation if supported
-    if (typeof navigator !== "undefined" && navigator.geolocation) {
-      setCoords((prev) => ({ ...prev, status: "acquiring" }));
-      navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCoords({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            status: "granted",
-          });
-        },
-        (err) => {
-          console.warn("Geolocation denied or error:", err.message);
-          setCoords((prev) => ({ ...prev, status: "denied" }));
-        },
-        { timeout: 8000 }
-      );
-    } else {
-      setCoords((prev) => ({ ...prev, status: "unavailable" }));
-    }
-
     const controller = new AbortController();
 
     const fetchProfile = async () => {
@@ -76,21 +56,67 @@ export default function ProfilePage() {
         const data = await res.json();
 
         if (res.ok && data.user) {
+          const u = data.user;
           setForm({
-            phoneNumber: data.user.phoneNumber || "",
-            bloodGroup: data.user.bloodGroup || "",
-            age: data.user.age ?? "",
-            weight: data.user.weight ?? "",
-            height: data.user.height ?? "",
-            role: data.user.role || "donor",
-            city: data.user.location?.city || "",
-            state: data.user.location?.state || "",
-            diseases: data.user.diseases?.join(", ") || "",
-            hospitalName: data.user.hospitalName || "",
-            registrationNumber: data.user.registrationNumber || "",
-            hospitalAddress: data.user.hospitalAddress || "",
-            hospitalPhone: data.user.hospitalPhone || "",
+            fullName: u.fullName || "",
+            phoneNumber: u.phoneNumber || "",
+            bloodGroup: u.bloodGroup || "",
+            age: u.age ?? "",
+            weight: u.weight ?? "",
+            height: u.height ?? "",
+            role: u.role || "donor",
+            city: u.location?.city || "",
+            state: u.location?.state || "",
+            diseases: u.diseases?.join(", ") || "",
+            hospitalName: u.hospitalName || "",
+            registrationNumber: u.registrationNumber || "",
+            hospitalAddress: u.hospitalAddress || "",
+            hospitalPhone: u.hospitalPhone || "",
           });
+
+          // Extract coordinates from user location if available
+          let initialLat = null;
+          let initialLng = null;
+          const loc = u.location;
+          if (loc) {
+            if (typeof loc.lat === "number" && typeof loc.lng === "number") {
+              initialLat = loc.lat;
+              initialLng = loc.lng;
+            } else if (loc.coordinates) {
+              if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number") {
+                initialLat = loc.coordinates.lat;
+                initialLng = loc.coordinates.lng;
+              } else if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2) {
+                initialLng = loc.coordinates.coordinates[0];
+                initialLat = loc.coordinates.coordinates[1];
+              } else if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+                initialLng = loc.coordinates[0];
+                initialLat = loc.coordinates[1];
+              }
+            }
+          }
+
+          if (initialLat != null && initialLng != null) {
+            setCoords({ lat: initialLat, lng: initialLng, status: "granted" });
+          } else if (typeof navigator !== "undefined" && navigator.geolocation) {
+            setCoords((prev) => ({ ...prev, status: "acquiring" }));
+            navigator.geolocation.getCurrentPosition(
+              (pos) => {
+                setCoords({
+                  lat: pos.coords.latitude,
+                  lng: pos.coords.longitude,
+                  status: "granted",
+                });
+              },
+              (err) => {
+                console.warn("Geolocation:", err.message);
+                setCoords((prev) => ({ ...prev, status: "denied" }));
+              },
+              { timeout: 8000 }
+            );
+          } else {
+            setCoords((prev) => ({ ...prev, status: "unavailable" }));
+          }
         }
       } catch (err) {
         if (err.name !== "AbortError") {
@@ -105,9 +131,53 @@ export default function ProfilePage() {
     return () => controller.abort();
   }, []);
 
+  const handleDetectLocation = () => {
+    if (!navigator.geolocation) {
+      setError("Geolocation is not supported by your browser.");
+      return;
+    }
+    setCoords((prev) => ({ ...prev, status: "acquiring" }));
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        setCoords({ lat, lng, status: "granted" });
+
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`
+          );
+          if (res.ok) {
+            const geo = await res.json();
+            const addr = geo.address || {};
+            const detectedCity = addr.city || addr.town || addr.village || addr.county || "";
+            const detectedState = addr.state || "";
+            setForm((prev) => ({
+              ...prev,
+              city: detectedCity || prev.city,
+              state: detectedState || prev.state,
+            }));
+          }
+        } catch {
+          // Keep coordinates even if reverse geocoding fails
+        }
+      },
+      (err) => {
+        console.warn("Detect location error:", err.message);
+        setCoords((prev) => ({ ...prev, status: "denied" }));
+      },
+      { timeout: 10000, enableHighAccuracy: true }
+    );
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+
+    if (!form.fullName || !form.fullName.trim()) {
+      setError("Please enter your full name.");
+      return;
+    }
 
     const isHospital = form.role === "hospital";
 
@@ -127,25 +197,29 @@ export default function ProfilePage() {
 
     setLoading(true);
     try {
+      const locationPayload = {
+        city: form.city,
+        state: form.state,
+        ...(coords.lat != null && coords.lng != null
+          ? { coordinates: { lat: coords.lat, lng: coords.lng } }
+          : {}),
+      };
+
       let bodyPayload = {};
       if (isHospital) {
         bodyPayload = {
+          fullName: form.fullName.trim(),
           role: "hospital",
           phoneNumber: form.phoneNumber,
           hospitalName: form.hospitalName,
           registrationNumber: form.registrationNumber,
           hospitalAddress: form.hospitalAddress,
           hospitalPhone: form.hospitalPhone,
+          location: locationPayload,
         };
       } else {
-        const locationPayload = {
-          city: form.city,
-          state: form.state,
-          ...(coords.lat != null && coords.lng != null
-            ? { coordinates: { lat: coords.lat, lng: coords.lng } }
-            : {}),
-        };
         bodyPayload = {
+          fullName: form.fullName.trim(),
           role: form.role,
           phoneNumber: form.phoneNumber,
           bloodGroup: form.bloodGroup,
@@ -173,6 +247,8 @@ export default function ProfilePage() {
       }
       const updatedUser = normalizeUser(data.user);
       login(updatedUser);
+      if (typeof updateUser === "function") updateUser(updatedUser);
+      if (typeof refreshUser === "function") await refreshUser();
       navigate(getRoleHomePath(updatedUser?.role));
     } catch {
       setError("Unable to connect to server. Please try again later.");
@@ -241,6 +317,23 @@ export default function ProfilePage() {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Full Name */}
+          <div className="field-group full">
+            <label htmlFor="fullName" className="field-label">
+              Full Name <span className="required">*</span>
+            </label>
+            <input
+              id="fullName"
+              name="fullName"
+              type="text"
+              className="field-input"
+              placeholder="e.g. Puneeth Sharma"
+              value={form.fullName}
+              onChange={handleChange}
+              required
+            />
           </div>
 
           {/* Hospital-Specific Fields */}
@@ -424,63 +517,6 @@ export default function ProfilePage() {
                 </div>
               </div>
 
-              <LocationPickerMap
-                initialLat={coords.lat}
-                initialLng={coords.lng}
-                onLocationChange={({ lat, lng, city, state }) => {
-                  setCoords({ lat, lng, status: "granted" });
-                  setForm((prev) => ({
-                    ...prev,
-                    city: city || prev.city,
-                    state: state || prev.state,
-                  }));
-                }}
-                label="Your Location (Map)"
-                height="260px"
-              />
-
-              {/* Row: City + State */}
-              <div className="form-row">
-                <div className="field-group">
-                  <label htmlFor="city" className="field-label">
-                    City <span className="required">*</span>
-                  </label>
-                  <input
-                    id="city"
-                    name="city"
-                    type="text"
-                    className="field-input"
-                    placeholder="Hyderabad"
-                    value={form.city}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-
-                <div className="field-group">
-                  <label htmlFor="state" className="field-label">
-                    State <span className="required">*</span>
-                  </label>
-                  <input
-                    id="state"
-                    name="state"
-                    type="text"
-                    className="field-input"
-                    placeholder="Telangana"
-                    value={form.state}
-                    onChange={handleChange}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div style={{ fontSize: "0.85rem", marginTop: "-0.5rem", marginBottom: "0.75rem", color: "#64748b" }}>
-                {coords.status === "acquiring" && "🔵 Detecting your location..."}
-                {coords.status === "granted" && `🟢 Exact Location Captured: ${coords.lat?.toFixed(4)}°, ${coords.lng?.toFixed(4)}°`}
-                {coords.status === "denied" && "🟡 Location access denied — map pin will be used."}
-                {coords.status === "unavailable" && "🟡 Geolocation unavailable — map pin will be used."}
-              </div>
-
               {/* Diseases — optional */}
               <div className="field-group full">
                 <label htmlFor="diseases" className="field-label">
@@ -502,6 +538,94 @@ export default function ProfilePage() {
               </div>
             </>
           )}
+
+          {/* Location & Map Section (Available for all roles) */}
+          <div style={{ marginTop: "1rem", marginBottom: "0.5rem" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+              <label className="field-label" style={{ margin: 0 }}>
+                Location (Map Pin & Coordinates) <span className="required">*</span>
+              </label>
+              <button
+                type="button"
+                onClick={handleDetectLocation}
+                disabled={coords.status === "acquiring"}
+                style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fecaca",
+                  borderRadius: "6px",
+                  padding: "0.35rem 0.75rem",
+                  fontSize: "0.82rem",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.35rem",
+                  color: "#b91c1c",
+                  fontWeight: 600,
+                  transition: "background 0.2s ease",
+                }}
+              >
+                <span>📍</span>
+                {coords.status === "acquiring" ? "Detecting location..." : "Detect My Location"}
+              </button>
+            </div>
+
+            <LocationPickerMap
+              initialLat={coords.lat}
+              initialLng={coords.lng}
+              onLocationChange={({ lat, lng, city, state }) => {
+                setCoords({ lat, lng, status: "granted" });
+                setForm((prev) => ({
+                  ...prev,
+                  city: city || prev.city,
+                  state: state || prev.state,
+                }));
+              }}
+              label="Location on Map"
+              height="240px"
+            />
+
+            {/* Row: City + State */}
+            <div className="form-row" style={{ marginTop: "0.75rem" }}>
+              <div className="field-group">
+                <label htmlFor="city" className="field-label">
+                  City <span className="required">*</span>
+                </label>
+                <input
+                  id="city"
+                  name="city"
+                  type="text"
+                  className="field-input"
+                  placeholder="e.g. Hyderabad"
+                  value={form.city}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+
+              <div className="field-group">
+                <label htmlFor="state" className="field-label">
+                  State <span className="required">*</span>
+                </label>
+                <input
+                  id="state"
+                  name="state"
+                  type="text"
+                  className="field-input"
+                  placeholder="e.g. Telangana"
+                  value={form.state}
+                  onChange={handleChange}
+                  required
+                />
+              </div>
+            </div>
+
+            <div style={{ fontSize: "0.85rem", marginTop: "-0.25rem", marginBottom: "0.75rem", color: "#64748b" }}>
+              {coords.status === "acquiring" && "🔵 Detecting your location..."}
+              {coords.status === "granted" && `🟢 Exact Coordinates Captured: ${coords.lat?.toFixed(4)}°, ${coords.lng?.toFixed(4)}°`}
+              {coords.status === "denied" && "🟡 Location access denied — map pin will be used."}
+              {coords.status === "unavailable" && "🟡 Geolocation unavailable — map pin will be used."}
+            </div>
+          </div>
 
           <button type="submit" className="profile-btn" disabled={loading}>
             {loading ? <span className="profile-spinner"></span> : "Save profile →"}

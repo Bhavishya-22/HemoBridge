@@ -56,7 +56,7 @@ export default function RequestBloodPage() {
   const [hospitalsLoading, setHospitalsLoading] = useState(false);
   const [selectedHospital, setSelectedHospital] = useState(null); // full hospital object from DB
   const [useManualHospital, setUseManualHospital] = useState(false); // true when hospital not in DB
-  const [manualHospital, setManualHospital] = useState({ name: "", city: "", state: "", lat: null, lng: null });
+  const [manualHospital, setManualHospital] = useState({ name: "", address: "", city: "", state: "", lat: null, lng: null });
 
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
@@ -137,6 +137,30 @@ export default function RequestBloodPage() {
             city: u?.location?.city || prev.city,
             state: u?.location?.state || prev.state,
           }));
+
+          let initialLat = null;
+          let initialLng = null;
+          const loc = u?.location;
+          if (loc) {
+            if (typeof loc.lat === "number" && typeof loc.lng === "number") {
+              initialLat = loc.lat;
+              initialLng = loc.lng;
+            } else if (loc.coordinates) {
+              if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number") {
+                initialLat = loc.coordinates.lat;
+                initialLng = loc.coordinates.lng;
+              } else if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2) {
+                initialLng = loc.coordinates.coordinates[0];
+                initialLat = loc.coordinates.coordinates[1];
+              } else if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+                initialLng = loc.coordinates[0];
+                initialLat = loc.coordinates[1];
+              }
+            }
+          }
+          if (initialLat != null && initialLng != null) {
+            setCoords({ lat: initialLat, lng: initialLng, status: "granted" });
+          }
         }
       } catch { /* ignore */ }
     };
@@ -175,20 +199,18 @@ export default function RequestBloodPage() {
       return;
     }
 
-    // Remote mode: must have EITHER a dropdown hospital OR manual hospital details
-    if (presenceMode === "remote") {
-      if (!selectedHospital && !useManualHospital) {
-        setMessage({ type: "error", text: "Please select or enter a hospital for your remote request." });
-        return;
-      }
-      if (useManualHospital && !manualHospital.name.trim()) {
-        setMessage({ type: "error", text: "Please enter the hospital name." });
-        return;
-      }
-      if (useManualHospital && (!manualHospital.city.trim() || !manualHospital.state.trim())) {
-        setMessage({ type: "error", text: "Please enter the hospital city and state." });
-        return;
-      }
+    // Hospital requirement: must have EITHER a dropdown hospital OR manual hospital details
+    if (!selectedHospital && !useManualHospital) {
+      setMessage({ type: "error", text: "Please select a hospital from the list or enter your hospital details manually." });
+      return;
+    }
+    if (useManualHospital && !manualHospital.name.trim()) {
+      setMessage({ type: "error", text: "Please enter the hospital name." });
+      return;
+    }
+    if (useManualHospital && (!manualHospital.city.trim() || !manualHospital.state.trim())) {
+      setMessage({ type: "error", text: "Please enter the hospital city and state." });
+      return;
     }
 
     setSubmitting(true);
@@ -206,27 +228,30 @@ export default function RequestBloodPage() {
       let preferredHospitalId = undefined;
       let hospitalLocationPayload = undefined;
 
-      if (presenceMode === "remote") {
-        if (selectedHospital && !useManualHospital) {
-          // Hospital selected from DB dropdown → route exclusively to that hospital
-          hospitalNameToSend = selectedHospital.hospitalName || selectedHospital.fullName;
-          preferredHospitalId = selectedHospital._id;
-          hospitalLocationPayload = {
-            city: selectedHospital.location?.city || "",
-            state: selectedHospital.location?.state || "",
-          };
-        } else if (useManualHospital) {
-          // Manual entry → hospital not in DB, visible to ALL hospitals as fallback
-          hospitalNameToSend = manualHospital.name;
-          preferredHospitalId = undefined; // null → any hospital can approve
-          hospitalLocationPayload = {
-            city: manualHospital.city,
-            state: manualHospital.state,
-            ...(manualHospital.lat != null && manualHospital.lng != null
-              ? { coordinates: { lat: manualHospital.lat, lng: manualHospital.lng } }
-              : {}),
-          };
-        }
+      if (selectedHospital && !useManualHospital) {
+        // Hospital selected from DB dropdown → route exclusively to that hospital
+        hospitalNameToSend = selectedHospital.hospitalName || selectedHospital.fullName;
+        preferredHospitalId = selectedHospital._id;
+        hospitalLocationPayload = {
+          address: selectedHospital.hospitalAddress || "",
+          city: selectedHospital.location?.city || "",
+          state: selectedHospital.location?.state || "",
+          ...(selectedHospital.location?.coordinates
+            ? { coordinates: selectedHospital.location.coordinates }
+            : {}),
+        };
+      } else if (useManualHospital) {
+        // Manual entry → hospital details with exact address and location
+        hospitalNameToSend = manualHospital.name;
+        preferredHospitalId = undefined;
+        hospitalLocationPayload = {
+          address: manualHospital.address || "",
+          city: manualHospital.city,
+          state: manualHospital.state,
+          ...(manualHospital.lat != null && manualHospital.lng != null
+            ? { coordinates: { lat: manualHospital.lat, lng: manualHospital.lng } }
+            : {}),
+        };
       }
 
       const res = await fetch(`${API_BASE}/requests/create`, {
@@ -373,10 +398,9 @@ export default function RequestBloodPage() {
               )}
 
               {/* ── Hospital picker (remote mode only) ── */}
-              {presenceMode === "remote" && (
                 <div className="flow-hospital-picker">
                   <div className="flow-hospital-picker-label">
-                    🏥 Select the hospital you contacted
+                    🏥 {presenceMode === "at_hospital" ? "Hospital you are admitted in" : "Hospital you contacted"}
                     <span style={{ fontWeight: 400, color: "#b91c1c", fontSize: "0.75rem" }}> (required)</span>
                   </div>
 
@@ -402,6 +426,7 @@ export default function RequestBloodPage() {
                           {hospitals.map((h) => (
                             <option key={h._id} value={h._id}>
                               {h.hospitalName || h.fullName}
+                              {h.hospitalAddress ? ` · ${h.hospitalAddress}` : ""}
                               {h.location?.city ? ` · ${h.location.city}` : ""}
                               {h.location?.state ? `, ${h.location.state}` : ""}
                             </option>
@@ -472,7 +497,7 @@ export default function RequestBloodPage() {
                         color: "#92400e",
                         lineHeight: 1.5,
                       }}>
-                        ⚠️ Since this hospital is not in our system, <strong>any verified hospital</strong> in the city/state can review and approve your request. Make sure you have already contacted them.
+                        ℹ️ Enter the exact hospital name and address/location. Only this hospital with matching details will review and verify your request.
                       </div>
 
                       {/* Hospital name */}
@@ -490,7 +515,21 @@ export default function RequestBloodPage() {
                         />
                       </div>
 
-                      {/* Hospital location map — same component as patient location */}
+                      {/* Hospital address / street */}
+                      <div className="flow-field" style={{ margin: 0 }}>
+                        <label htmlFor="manualHospitalAddress" style={{ fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "0.35rem", display: "block" }}>
+                          Hospital address / street
+                        </label>
+                        <input
+                          id="manualHospitalAddress"
+                          name="address"
+                          value={manualHospital.address}
+                          onChange={handleManualHospitalChange}
+                          placeholder="e.g. Road No 2, Banjara Hills"
+                        />
+                      </div>
+
+                      {/* Hospital location map */}
                       <LocationPickerMap
                         initialLat={manualHospital.lat}
                         initialLng={manualHospital.lng}
@@ -507,7 +546,7 @@ export default function RequestBloodPage() {
                         height="220px"
                       />
 
-                      {/* City + State — auto-filled by map, still editable */}
+                      {/* City + State */}
                       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
                         <div className="flow-field" style={{ margin: 0 }}>
                           <label htmlFor="manualHospitalCity" style={{ fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "0.35rem", display: "block" }}>
@@ -539,20 +578,6 @@ export default function RequestBloodPage() {
                     </div>
                   )}
                 </div>
-              )}
-
-
-              {/* Hospital name input — only shown in at_hospital mode */}
-              {presenceMode === "at_hospital" && (
-                <div className="flow-field">
-                  <label htmlFor="hospitalName">Hospital name <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional — helps auto-match)</span></label>
-                  <input
-                    id="hospitalName" name="hospitalName"
-                    value={form.hospitalName} onChange={handleChange}
-                    placeholder="Hospital name"
-                  />
-                </div>
-              )}
 
               <div className="flow-field">
                 <label htmlFor="description">Additional details <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional)</span></label>

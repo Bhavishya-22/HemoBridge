@@ -144,6 +144,7 @@ const bloodRequestSchema = new mongoose.Schema(
     // Stored so the admin/audit trail can see both where the patient is and
     // where the hospital is. NOT used for donor proximity — `location` is.
     hospitalLocation: {
+      address: String,
       city: String,
       state: String,
       coordinates: {

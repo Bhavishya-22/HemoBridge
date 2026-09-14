@@ -52,6 +52,34 @@ export function AuthProvider({ children }) {
     setUser(normalized);
   };
 
+  const updateUser = (userData) => {
+    const normalized = normalizeUser(userData);
+    if (normalized) {
+      sessionStorage.setItem("bb_user", JSON.stringify(normalized));
+    }
+    setUser(normalized);
+  };
+
+  const refreshUser = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/user/profile`, {
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const normalized = normalizeUser(data?.user);
+        if (normalized) {
+          sessionStorage.setItem("bb_user", JSON.stringify(normalized));
+          setUser(normalized);
+          return normalized;
+        }
+      }
+    } catch (err) {
+      console.warn("refreshUser failed:", err.message);
+    }
+    return null;
+  };
+
   const logout = async () => {
     try {
       await fetch(`${API_BASE}/auth/logout`, {
@@ -68,7 +96,15 @@ export function AuthProvider({ children }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, isLoggedIn: !!user, checkingAuth, login, logout }}
+      value={{
+        user,
+        isLoggedIn: !!user,
+        checkingAuth,
+        login,
+        logout,
+        updateUser,
+        refreshUser,
+      }}
     >
       {children}
     </AuthContext.Provider>

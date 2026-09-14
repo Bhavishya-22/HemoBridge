@@ -21,7 +21,7 @@ function extractDonorCoords(loc) {
 }
 
 export default function DonateBloodPage() {
-  const { user } = useAuth();
+  const { user, refreshUser } = useAuth();
   const userId = user?.id || user?._id;
   const [searchParams] = useSearchParams();
   const deepLinkRequestId = searchParams.get("requestId");
@@ -40,6 +40,9 @@ export default function DonateBloodPage() {
   const loadData = async () => {
     setLoading(true);
     try {
+      if (typeof refreshUser === "function") {
+        refreshUser().catch(() => {});
+      }
       const [viewRes, mineRes] = await Promise.all([
         fetch(`${API_BASE}/requests/view`, { credentials: "include" }),
         fetch(`${API_BASE}/donor/my-acceptances`, { credentials: "include" }),

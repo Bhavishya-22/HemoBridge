@@ -283,10 +283,13 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
     }
 });
 
+const BloodRequest = require('../model/bloodRequestModel');
+
 // Updates user profile fields and marks profile as completed.
 // Excludes password and refreshToken from response.
 exports.userUpdateProfile = asyncHandler(async (req, res) => {
     const {
+        fullName,
         phoneNumber,
         bloodGroup,
         age,
@@ -312,57 +315,71 @@ exports.userUpdateProfile = asyncHandler(async (req, res) => {
 
     let updateData = {};
 
+    if (fullName && fullName.trim()) {
+        updateData.fullName = fullName.trim();
+    }
+
     if (targetRole === "hospital") {
         updateData = {
+            ...updateData,
             role: targetRole,
-            phoneNumber,
-            hospitalName,
-            registrationNumber,
-            hospitalAddress,
-            hospitalPhone,
+            phoneNumber: phoneNumber || user.phoneNumber,
+            hospitalName: hospitalName || user.hospitalName,
+            registrationNumber: registrationNumber || user.registrationNumber,
+            hospitalAddress: hospitalAddress || user.hospitalAddress,
+            hospitalPhone: hospitalPhone || user.hospitalPhone,
             profileCompleted: true,
             isVerified: true,
         };
     } else {
         updateData = {
+            ...updateData,
             role: targetRole,
-            phoneNumber,
-            bloodGroup,
-            age,
-            weight,
-            height,
-            diseases,
+            phoneNumber: phoneNumber || user.phoneNumber,
+            bloodGroup: bloodGroup || user.bloodGroup,
+            age: age !== undefined && age !== "" ? Number(age) : user.age,
+            weight: weight !== undefined && weight !== "" ? Number(weight) : user.weight,
+            height: height !== undefined && height !== "" ? Number(height) : user.height,
+            diseases: diseases !== undefined ? diseases : user.diseases,
             profileCompleted: true,
             isVerified: true,
         };
+    }
 
-        if (location) {
-            const existingLocation =
-                user.location && typeof user.location.toObject === "function"
-                    ? user.location.toObject()
-                    : user.location || {};
+    if (location) {
+        const existingLocation =
+            user.location && typeof user.location.toObject === "function"
+                ? user.location.toObject()
+                : user.location || {};
 
-            updateData.location = {
-                ...existingLocation,
-                city: location.city || "",
-                state: location.state || "",
+        updateData.location = {
+            ...existingLocation,
+            city: location.city !== undefined ? location.city : existingLocation.city || "",
+            state: location.state !== undefined ? location.state : existingLocation.state || "",
+        };
+
+        if (location.coordinates?.lat != null && location.coordinates?.lng != null) {
+            updateData.location.coordinates = {
+                type: "Point",
+                coordinates: [Number(location.coordinates.lng), Number(location.coordinates.lat)],
             };
-
-            if (location.coordinates?.lat != null && location.coordinates?.lng != null) {
-                updateData.location.coordinates = {
-                    type: "Point",
-                    coordinates: [Number(location.coordinates.lng), Number(location.coordinates.lat)],
-                };
-            } else if (
-                location.coordinates &&
-                Array.isArray(location.coordinates.coordinates) &&
-                location.coordinates.coordinates.length === 2
-            ) {
-                updateData.location.coordinates = {
-                    type: "Point",
-                    coordinates: location.coordinates.coordinates,
-                };
-            }
+        } else if (
+            location.coordinates &&
+            Array.isArray(location.coordinates.coordinates) &&
+            location.coordinates.coordinates.length === 2
+        ) {
+            updateData.location.coordinates = {
+                type: "Point",
+                coordinates: location.coordinates.coordinates,
+            };
+        } else if (
+            Array.isArray(location.coordinates) &&
+            location.coordinates.length === 2
+        ) {
+            updateData.location.coordinates = {
+                type: "Point",
+                coordinates: [Number(location.coordinates[0]), Number(location.coordinates[1])],
+            };
         }
     }
 
@@ -372,10 +389,28 @@ exports.userUpdateProfile = asyncHandler(async (req, res) => {
         { returnDocument: "after" }
     ).select("-password -refreshToken");
 
+    // Dynamically synchronize active open requests created by this user
+    // so any distance calculations / hospital routing immediately reflect the new location
+    if (updateData.location) {
+        try {
+            await BloodRequest.updateMany(
+                {
+                    requestedBy: req.user.id,
+                    status: { $in: ["pending_hospital_approval", "waiting_for_donor"] },
+                },
+                {
+                    $set: { location: updateData.location },
+                }
+            );
+        } catch (syncErr) {
+            console.warn("Could not sync location to active requests:", syncErr.message);
+        }
+    }
+
     res.status(200).json({
         success: true,
         message: "Profile updated successfully",
-        user: updatedUser
+        user: updatedUser,
     });
 });
 

@@ -53,16 +53,21 @@ exports.requestHospitalVerification = asyncHandler(async (req, res) => {
         });
     }
 
+    const updatePayload = {
+        hospitalName,
+        registrationNumber,
+        hospitalAddress,
+        hospitalPhone,
+        hospitalVerificationStatus: "pending",
+    };
+    if (req.body.location) {
+        updatePayload.location = req.body.location;
+    }
+
     // Update user with hospital details
     const updatedUser = await User.findByIdAndUpdate(
         userId,
-        {
-            hospitalName,
-            registrationNumber,
-            hospitalAddress,
-            hospitalPhone,
-            hospitalVerificationStatus: "pending",
-        },
+        updatePayload,
         { new: true }
     ).select("-password -refreshToken");
 

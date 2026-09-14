@@ -58,15 +58,26 @@ exports.acceptRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  // Verify donor was broadcast to
+  // If donor wasn't in candidatePool (e.g. registered after broadcast or viewing nearby open requests),
+  // dynamically add them so candidatePool tracking and distance metrics remain accurate.
   const inPool = (existing.candidatePool || []).some(
     (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
   );
   if (!inPool) {
-    return res.status(403).json({
-      success: false,
-      message: "You are not a candidate for this request. Only donors who were broadcast to this request can accept.",
+    let initialDist = 35.0;
+    const donorCoords = parseCoordinates(donorUser.location);
+    const reqCoords = parseCoordinates(existing.location);
+    if (donorCoords && reqCoords) {
+      initialDist = calculateHaversineDistanceKm(donorCoords[1], donorCoords[0], reqCoords[1], reqCoords[0]);
+    }
+    existing.candidatePool = existing.candidatePool || [];
+    existing.candidatePool.push({
+      donor: donorObjId,
+      distanceKm: initialDist,
+      searchRadiusKm: 50,
+      addedAt: now,
     });
+    await existing.save();
   }
 
   // Verify donor has not already declined
@@ -317,15 +328,9 @@ exports.rejectRequest = asyncHandler(async (req, res) => {
     });
   }
 
-  const inPool = request.candidatePool.some(
+  const inPool = (request.candidatePool || []).some(
     (item) => (item.donor?._id || item.donor).toString() === donorId.toString()
   );
-  if (!inPool) {
-    return res.status(403).json({
-      success: false,
-      message: "You are not a candidate for this request.",
-    });
-  }
 
   // Add to rejectedDonors
   request.rejectedDonors.push({
@@ -334,10 +339,12 @@ exports.rejectRequest = asyncHandler(async (req, res) => {
     rejectedAt: new Date(),
   });
 
-  // Remove from candidatePool so they no longer see this request in viewRequests
-  request.candidatePool = request.candidatePool.filter(
-    (item) => (item.donor?._id || item.donor).toString() !== donorId.toString()
-  );
+  // Remove from candidatePool if present
+  if (inPool) {
+    request.candidatePool = request.candidatePool.filter(
+      (item) => (item.donor?._id || item.donor).toString() !== donorId.toString()
+    );
+  }
 
   await request.save();
 

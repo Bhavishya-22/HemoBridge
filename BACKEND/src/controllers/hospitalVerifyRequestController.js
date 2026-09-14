@@ -61,17 +61,42 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
   }
 
   // ── Hospital routing guard ────────────────────────────────────────────────
-  // If a specific hospital was designated by the receiver, only that hospital
-  // may approve this request. Other hospitals get a 403.
-  // If preferredHospital is null (unmatched fallback), any verified hospital may approve.
-  if (
-    request.preferredHospital &&
-    request.preferredHospital.toString() !== hospitalId.toString()
-  ) {
+  // Only the designated hospital may approve this request.
+  // Hospital BB with address B must NEVER approve a request for Hospital AA with address A.
+  const hospitalUser = await User.findById(hospitalId);
+  const hName = (hospitalUser?.hospitalName || hospitalUser?.fullName || "").toLowerCase().trim();
+  const hAddr = (hospitalUser?.hospitalAddress || "").toLowerCase().trim();
+  const hCity = (hospitalUser?.location?.city || "").toLowerCase().trim();
+
+  let isDesignated = false;
+  if (request.preferredHospital) {
+    isDesignated = (request.preferredHospital._id || request.preferredHospital).toString() === hospitalId.toString();
+  } else {
+    const reqHospName = (request.hospitalName || "").toLowerCase().trim();
+    const reqHospAddr = (request.hospitalLocation?.address || "").toLowerCase().trim();
+    const reqHospCity = (request.hospitalLocation?.city || request.location?.city || "").toLowerCase().trim();
+
+    if (reqHospName) {
+      const nameMatches = hName && (hName.includes(reqHospName) || reqHospName.includes(hName));
+      if (nameMatches) {
+        if (reqHospAddr && hAddr) {
+          isDesignated = hAddr.includes(reqHospAddr) || reqHospAddr.includes(hAddr);
+        } else if (reqHospCity && hCity) {
+          isDesignated = reqHospCity === hCity;
+        } else {
+          isDesignated = true;
+        }
+      }
+    } else if (reqHospCity && hCity && reqHospCity === hCity) {
+      isDesignated = true;
+    }
+  }
+
+  if (!isDesignated) {
     return res.status(403).json({
       success: false,
       message:
-        "You are not the designated hospital for this blood request. Only the hospital selected by the receiver can approve it.",
+        "You are not the designated hospital for this blood request. Only the hospital specified by the receiver can approve it.",
     });
   }
 
@@ -82,6 +107,7 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
   request.hospitalApprovedBy = hospitalId;
   request.hospitalApprovedAt = new Date();
   request.assignedHospital = hospitalId;
+  request.preferredHospital = hospitalId;
   request.status = REQUEST_STATUSES.HOSPITAL_APPROVED;
 
   await logAuditEvent({
