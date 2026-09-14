@@ -453,3 +453,137 @@ button[type="submit"].flow-btn {
   .flow-content { padding: 0 1rem; }
   .flow-request-item { padding: 0.9rem 1rem; }
 }
+
+/* ═══════════════════════════════════════════════════
+   PRESENCE MODE TOGGLE
+   ═══════════════════════════════════════════════════ */
+
+.flow-mode-toggle {
+  display: flex;
+  gap: 0.6rem;
+  background: #fef2f2;
+  border: 1.5px solid #fecaca;
+  border-radius: 14px;
+  padding: 0.45rem;
+  margin-bottom: 0.25rem;
+}
+
+.flow-mode-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border: none;
+  border-radius: 10px;
+  font-family: "Inter", sans-serif;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.18s, color 0.18s, box-shadow 0.18s, transform 0.12s;
+  background: transparent;
+  color: #b91c1c;
+  line-height: 1.3;
+  text-align: center;
+}
+
+.flow-mode-btn:hover:not(.active) {
+  background: rgba(185, 28, 28, 0.07);
+}
+
+.flow-mode-btn.active {
+  background: linear-gradient(135deg, #b91c1c, #991b1b);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(185, 28, 28, 0.28);
+  transform: translateY(-1px);
+}
+
+.flow-mode-btn .mode-icon {
+  font-size: 1.15rem;
+  line-height: 1;
+}
+
+/* ═══════════════════════════════════════════════════
+   HOSPITAL PICKER (remote mode)
+   ═══════════════════════════════════════════════════ */
+
+.flow-hospital-picker {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  background: #fff9f9;
+  border: 1.5px solid #fecaca;
+  border-radius: 14px;
+  padding: 1rem 1.1rem;
+  animation: flow-fadein 0.22s ease-out;
+}
+
+@keyframes flow-fadein {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.flow-hospital-picker-label {
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: #991b1b;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.flow-hospital-picker select {
+  width: 100%;
+  padding: 0.65rem 0.85rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 0.93rem;
+  background: #fff;
+  box-sizing: border-box;
+  transition: border-color 0.15s;
+  outline: none;
+  color: #1e293b;
+  cursor: pointer;
+}
+
+.flow-hospital-picker select:focus {
+  border-color: #b91c1c;
+  box-shadow: 0 0 0 3px rgba(185, 28, 28, 0.08);
+}
+
+.flow-hospital-selected-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding: 0.75rem 0.9rem;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: #065f46;
+  animation: flow-fadein 0.18s ease-out;
+}
+
+.flow-hospital-selected-info .info-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.flow-hospital-selected-info strong {
+  display: block;
+  font-size: 0.86rem;
+  margin-bottom: 0.15rem;
+  color: #064e3b;
+}
+
+.flow-hospital-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.83rem;
+  color: #94a3b8;
+  padding: 0.4rem 0;
+}

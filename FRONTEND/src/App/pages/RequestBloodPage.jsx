@@ -46,6 +46,18 @@ export default function RequestBloodPage() {
   const [submitting, setSubmitting] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
 
+  // ── Presence mode ────────────────────────────────────────────────────────
+  // "at_hospital" → user is physically at the hospital (single location)
+  // "remote"      → user is elsewhere; must pick a hospital separately
+  const [presenceMode, setPresenceMode] = useState("at_hospital");
+
+  // ── Hospital picker (remote mode) ────────────────────────────────────────
+  const [hospitals, setHospitals] = useState([]);
+  const [hospitalsLoading, setHospitalsLoading] = useState(false);
+  const [selectedHospital, setSelectedHospital] = useState(null); // full hospital object from DB
+  const [useManualHospital, setUseManualHospital] = useState(false); // true when hospital not in DB
+  const [manualHospital, setManualHospital] = useState({ name: "", city: "", state: "", lat: null, lng: null });
+
   const [detailModalOpen, setDetailModalOpen] = useState(false);
   const [selectedDetail, setSelectedDetail] = useState(null);
   const [detailLoading, setDetailLoading] = useState(false);
@@ -67,6 +79,29 @@ export default function RequestBloodPage() {
   useEffect(() => {
     if (deepLinkRequestId) handleOpenDetails(deepLinkRequestId);
   }, [deepLinkRequestId]);
+
+  // ── Load verified hospitals for the picker ───────────────────────────────
+  useEffect(() => {
+    const loadHospitals = async () => {
+      setHospitalsLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/hospitals/all`, { credentials: "include" });
+        if (res.ok) {
+          const data = await res.json();
+          // Filter to only verified hospitals
+          const verified = (data.hospitals || data.data || []).filter(
+            (h) => h.hospitalVerified || h.hospitalVerificationStatus === "verified"
+          );
+          setHospitals(verified);
+        }
+      } catch (err) {
+        console.warn("Could not load hospital list:", err);
+      } finally {
+        setHospitalsLoading(false);
+      }
+    };
+    loadHospitals();
+  }, []);
 
   const loadMyRequests = async () => {
     try {
@@ -115,6 +150,22 @@ export default function RequestBloodPage() {
     setForm((prev) => ({ ...prev, [name]: name === "quantity" ? Number(value) : value }));
   };
 
+  // ── Hospital picker change ────────────────────────────────────────────────
+  const handleHospitalSelect = (e) => {
+    const hId = e.target.value;
+    if (!hId) { setSelectedHospital(null); return; }
+    const h = hospitals.find((x) => x._id === hId);
+    setSelectedHospital(h || null);
+    // Selecting from dropdown clears manual entry
+    setUseManualHospital(false);
+    setManualHospital({ name: "", city: "", state: "" });
+  };
+
+  const handleManualHospitalChange = (e) => {
+    const { name, value } = e.target;
+    setManualHospital((prev) => ({ ...prev, [name]: value }));
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage({ type: "", text: "" });
@@ -122,6 +173,22 @@ export default function RequestBloodPage() {
     if (!form.bloodGroup || !form.quantity || !form.city || !form.state) {
       setMessage({ type: "error", text: "Blood group, quantity, city, and state are required." });
       return;
+    }
+
+    // Remote mode: must have EITHER a dropdown hospital OR manual hospital details
+    if (presenceMode === "remote") {
+      if (!selectedHospital && !useManualHospital) {
+        setMessage({ type: "error", text: "Please select or enter a hospital for your remote request." });
+        return;
+      }
+      if (useManualHospital && !manualHospital.name.trim()) {
+        setMessage({ type: "error", text: "Please enter the hospital name." });
+        return;
+      }
+      if (useManualHospital && (!manualHospital.city.trim() || !manualHospital.state.trim())) {
+        setMessage({ type: "error", text: "Please enter the hospital city and state." });
+        return;
+      }
     }
 
     setSubmitting(true);
@@ -134,6 +201,34 @@ export default function RequestBloodPage() {
           : {}),
       };
 
+      // ── Build hospital-related payload ──────────────────────────────────────
+      let hospitalNameToSend = form.hospitalName;
+      let preferredHospitalId = undefined;
+      let hospitalLocationPayload = undefined;
+
+      if (presenceMode === "remote") {
+        if (selectedHospital && !useManualHospital) {
+          // Hospital selected from DB dropdown → route exclusively to that hospital
+          hospitalNameToSend = selectedHospital.hospitalName || selectedHospital.fullName;
+          preferredHospitalId = selectedHospital._id;
+          hospitalLocationPayload = {
+            city: selectedHospital.location?.city || "",
+            state: selectedHospital.location?.state || "",
+          };
+        } else if (useManualHospital) {
+          // Manual entry → hospital not in DB, visible to ALL hospitals as fallback
+          hospitalNameToSend = manualHospital.name;
+          preferredHospitalId = undefined; // null → any hospital can approve
+          hospitalLocationPayload = {
+            city: manualHospital.city,
+            state: manualHospital.state,
+            ...(manualHospital.lat != null && manualHospital.lng != null
+              ? { coordinates: { lat: manualHospital.lat, lng: manualHospital.lng } }
+              : {}),
+          };
+        }
+      }
+
       const res = await fetch(`${API_BASE}/requests/create`, {
         method: "POST",
         credentials: "include",
@@ -142,15 +237,21 @@ export default function RequestBloodPage() {
           bloodGroup: form.bloodGroup,
           quantity: form.quantity,
           emergencyLevel: form.emergencyLevel,
-          hospitalName: form.hospitalName,
+          hospitalName: hospitalNameToSend,
           description: form.description,
           location: locationPayload,
+          presenceMode,
+          preferredHospital: preferredHospitalId,
+          hospitalLocation: hospitalLocationPayload,
         }),
       });
       const data = await res.json();
       if (!res.ok) { setMessage({ type: "error", text: data.message || "Could not create request." }); return; }
       setMessage({ type: "success", text: data.message || "Request submitted! A hospital will verify it next." });
       setForm((prev) => ({ ...EMPTY_FORM, bloodGroup: prev.bloodGroup, city: prev.city, state: prev.state }));
+      setSelectedHospital(null);
+      setUseManualHospital(false);
+      setManualHospital({ name: "", city: "", state: "" });
       await loadMyRequests();
     } catch { setMessage({ type: "error", text: "Unable to connect to server. Please try again." }); }
     finally { setSubmitting(false); }
@@ -164,6 +265,7 @@ export default function RequestBloodPage() {
   }[coords.status] || "";
 
   return (
+
     <div className="flow-page">
       {/* Page header */}
       <header className="flow-header">
@@ -186,6 +288,39 @@ export default function RequestBloodPage() {
               </div>
             )}
             <form className="flow-form" onSubmit={handleSubmit}>
+
+              {/* ── Presence Mode Toggle ── */}
+              <div>
+                <div style={{ fontSize: "0.83rem", fontWeight: 700, color: "#334155", marginBottom: "0.55rem", letterSpacing: "0.01em" }}>
+                  Where are you right now?
+                </div>
+                <div className="flow-mode-toggle" role="group" aria-label="Presence mode">
+                  <button
+                    type="button"
+                    id="mode-at-hospital"
+                    className={`flow-mode-btn${presenceMode === "at_hospital" ? " active" : ""}`}
+                    onClick={() => { setPresenceMode("at_hospital"); setSelectedHospital(null); }}
+                  >
+                    <span className="mode-icon">🏥</span>
+                    Present in the hospital
+                  </button>
+                  <button
+                    type="button"
+                    id="mode-remote"
+                    className={`flow-mode-btn${presenceMode === "remote" ? " active" : ""}`}
+                    onClick={() => setPresenceMode("remote")}
+                  >
+                    <span className="mode-icon">📍</span>
+                    Not present in the hospital
+                  </button>
+                </div>
+                <p style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "0.35rem", lineHeight: 1.5 }}>
+                  {presenceMode === "at_hospital"
+                    ? "Your location will be used for both the request and hospital matching."
+                    : "Enter your current location below, then select the hospital you've contacted."}
+                </p>
+              </div>
+
               <div className="flow-row">
                 <div className="flow-field">
                   <label htmlFor="bloodGroup">Blood group</label>
@@ -210,6 +345,7 @@ export default function RequestBloodPage() {
                 </select>
               </div>
 
+              {/* Patient location map — always visible (used for donor proximity) */}
               <LocationPickerMap
                 initialLat={coords.lat}
                 initialLng={coords.lng}
@@ -217,17 +353,17 @@ export default function RequestBloodPage() {
                   setCoords({ lat, lng, status: "granted" });
                   setForm((prev) => ({ ...prev, city: city || prev.city, state: state || prev.state }));
                 }}
-                label="Patient Location (Map)"
-                height="260px"
+                label={presenceMode === "at_hospital" ? "Your Location (Map)" : "Your Current Location (Map)"}
+                height="240px"
               />
 
               <div className="flow-row">
                 <div className="flow-field">
-                  <label htmlFor="city">City</label>
+                  <label htmlFor="city">{presenceMode === "at_hospital" ? "City" : "Your city"}</label>
                   <input id="city" name="city" value={form.city} onChange={handleChange} required placeholder="e.g. Hyderabad" />
                 </div>
                 <div className="flow-field">
-                  <label htmlFor="state">State</label>
+                  <label htmlFor="state">{presenceMode === "at_hospital" ? "State" : "Your state"}</label>
                   <input id="state" name="state" value={form.state} onChange={handleChange} required placeholder="e.g. Telangana" />
                 </div>
               </div>
@@ -236,14 +372,187 @@ export default function RequestBloodPage() {
                 <p className="flow-geo-status">{geoStatusMsg}</p>
               )}
 
-              <div className="flow-field">
-                <label htmlFor="hospitalName">Preferred hospital <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional)</span></label>
-                <input
-                  id="hospitalName" name="hospitalName"
-                  value={form.hospitalName} onChange={handleChange}
-                  placeholder="Hospital name"
-                />
-              </div>
+              {/* ── Hospital picker (remote mode only) ── */}
+              {presenceMode === "remote" && (
+                <div className="flow-hospital-picker">
+                  <div className="flow-hospital-picker-label">
+                    🏥 Select the hospital you contacted
+                    <span style={{ fontWeight: 400, color: "#b91c1c", fontSize: "0.75rem" }}> (required)</span>
+                  </div>
+
+                  {/* Dropdown — hidden when manual mode is active */}
+                  {!useManualHospital && (
+                    <>
+                      {hospitalsLoading ? (
+                        <div className="flow-hospital-loading">
+                          <span className="flow-spinner" style={{ width: 16, height: 16, borderWidth: 2 }} />
+                          Loading verified hospitals…
+                        </div>
+                      ) : hospitals.length === 0 ? (
+                        <p style={{ fontSize: "0.82rem", color: "#94a3b8" }}>
+                          No verified hospitals found in our system.
+                        </p>
+                      ) : (
+                        <select
+                          id="hospitalPicker"
+                          value={selectedHospital?._id || ""}
+                          onChange={handleHospitalSelect}
+                        >
+                          <option value="">— Choose a hospital —</option>
+                          {hospitals.map((h) => (
+                            <option key={h._id} value={h._id}>
+                              {h.hospitalName || h.fullName}
+                              {h.location?.city ? ` · ${h.location.city}` : ""}
+                              {h.location?.state ? `, ${h.location.state}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+
+                      {selectedHospital && (
+                        <div className="flow-hospital-selected-info">
+                          <span className="info-icon">✅</span>
+                          <div>
+                            <strong>{selectedHospital.hospitalName || selectedHospital.fullName}</strong>
+                            {selectedHospital.hospitalAddress && (
+                              <span>📍 {selectedHospital.hospitalAddress}</span>
+                            )}
+                            {selectedHospital.hospitalPhone && (
+                              <span style={{ display: "block", marginTop: "0.15rem" }}>
+                                📞 <a href={`tel:${selectedHospital.hospitalPhone}`} style={{ color: "#065f46", textDecoration: "underline" }}>
+                                  {selectedHospital.hospitalPhone}
+                                </a>
+                              </span>
+                            )}
+                            {(selectedHospital.location?.city || selectedHospital.location?.state) && (
+                              <span style={{ display: "block", marginTop: "0.15rem", color: "#047857" }}>
+                                {[selectedHospital.location.city, selectedHospital.location.state].filter(Boolean).join(", ")}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+
+                  {/* ── "Not in list" toggle ── */}
+                  <button
+                    type="button"
+                    id="toggle-manual-hospital"
+                    style={{
+                      background: "none",
+                      border: "none",
+                      padding: "0.2rem 0",
+                      fontSize: "0.8rem",
+                      color: useManualHospital ? "#b91c1c" : "#64748b",
+                      cursor: "pointer",
+                      textDecoration: "underline",
+                      textAlign: "left",
+                      fontWeight: useManualHospital ? 700 : 500,
+                    }}
+                    onClick={() => {
+                      setUseManualHospital((v) => !v);
+                      setSelectedHospital(null);
+                    }}
+                  >
+                    {useManualHospital
+                      ? "← Go back to hospital list"
+                      : "My hospital is not in the list — enter manually"}
+                  </button>
+
+                  {/* ── Manual hospital entry fields ── */}
+                  {useManualHospital && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "0.7rem", animation: "flow-fadein 0.18s ease-out" }}>
+                      <div style={{
+                        background: "#fffbeb",
+                        border: "1px solid #fcd34d",
+                        borderRadius: 10,
+                        padding: "0.6rem 0.85rem",
+                        fontSize: "0.78rem",
+                        color: "#92400e",
+                        lineHeight: 1.5,
+                      }}>
+                        ⚠️ Since this hospital is not in our system, <strong>any verified hospital</strong> in the city/state can review and approve your request. Make sure you have already contacted them.
+                      </div>
+
+                      {/* Hospital name */}
+                      <div className="flow-field" style={{ margin: 0 }}>
+                        <label htmlFor="manualHospitalName" style={{ fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "0.35rem", display: "block" }}>
+                          Hospital name <span style={{ color: "#b91c1c" }}>*</span>
+                        </label>
+                        <input
+                          id="manualHospitalName"
+                          name="name"
+                          value={manualHospital.name}
+                          onChange={handleManualHospitalChange}
+                          placeholder="e.g. Apollo Hospitals"
+                          required={useManualHospital}
+                        />
+                      </div>
+
+                      {/* Hospital location map — same component as patient location */}
+                      <LocationPickerMap
+                        initialLat={manualHospital.lat}
+                        initialLng={manualHospital.lng}
+                        onLocationChange={({ lat, lng, city, state }) => {
+                          setManualHospital((prev) => ({
+                            ...prev,
+                            lat,
+                            lng,
+                            city: city || prev.city,
+                            state: state || prev.state,
+                          }));
+                        }}
+                        label="Hospital Location (Map)"
+                        height="220px"
+                      />
+
+                      {/* City + State — auto-filled by map, still editable */}
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                        <div className="flow-field" style={{ margin: 0 }}>
+                          <label htmlFor="manualHospitalCity" style={{ fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "0.35rem", display: "block" }}>
+                            Hospital city <span style={{ color: "#b91c1c" }}>*</span>
+                          </label>
+                          <input
+                            id="manualHospitalCity"
+                            name="city"
+                            value={manualHospital.city}
+                            onChange={handleManualHospitalChange}
+                            placeholder="e.g. Hyderabad"
+                            required={useManualHospital}
+                          />
+                        </div>
+                        <div className="flow-field" style={{ margin: 0 }}>
+                          <label htmlFor="manualHospitalState" style={{ fontSize: "0.8rem", fontWeight: 600, color: "#334155", marginBottom: "0.35rem", display: "block" }}>
+                            Hospital state <span style={{ color: "#b91c1c" }}>*</span>
+                          </label>
+                          <input
+                            id="manualHospitalState"
+                            name="state"
+                            value={manualHospital.state}
+                            onChange={handleManualHospitalChange}
+                            placeholder="e.g. Telangana"
+                            required={useManualHospital}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+
+              {/* Hospital name input — only shown in at_hospital mode */}
+              {presenceMode === "at_hospital" && (
+                <div className="flow-field">
+                  <label htmlFor="hospitalName">Hospital name <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional — helps auto-match)</span></label>
+                  <input
+                    id="hospitalName" name="hospitalName"
+                    value={form.hospitalName} onChange={handleChange}
+                    placeholder="Hospital name"
+                  />
+                </div>
+              )}
 
               <div className="flow-field">
                 <label htmlFor="description">Additional details <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional)</span></label>
@@ -259,6 +568,7 @@ export default function RequestBloodPage() {
               </button>
             </form>
           </section>
+
 
           {/* ── Right: My Requests List ── */}
           <section className="flow-card">

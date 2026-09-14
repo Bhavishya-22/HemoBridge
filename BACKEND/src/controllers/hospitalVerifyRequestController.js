@@ -60,6 +60,21 @@ exports.approveBloodRequest = asyncHandler(async (req, res) => {
     });
   }
 
+  // ── Hospital routing guard ────────────────────────────────────────────────
+  // If a specific hospital was designated by the receiver, only that hospital
+  // may approve this request. Other hospitals get a 403.
+  // If preferredHospital is null (unmatched fallback), any verified hospital may approve.
+  if (
+    request.preferredHospital &&
+    request.preferredHospital.toString() !== hospitalId.toString()
+  ) {
+    return res.status(403).json({
+      success: false,
+      message:
+        "You are not the designated hospital for this blood request. Only the hospital selected by the receiver can approve it.",
+    });
+  }
+
   const previousStatus = request.status;
   validateTransition(previousStatus, REQUEST_STATUSES.HOSPITAL_APPROVED);
 

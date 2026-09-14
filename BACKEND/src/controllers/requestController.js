@@ -20,9 +20,26 @@ const { logAuditEvent } = require("../utils/auditLogger");
 /**
  * STEP 1: Receiver creates blood request.
  * Part C-1: accepts location.coordinates.{lat,lng} from body and passes through to schema.
+ * Hospital routing:
+ *  - presenceMode "at_hospital" → auto-match nearest verified hospital by patient coordinates.
+ *  - presenceMode "remote"      → receiver explicitly designates a hospitalId (required).
+ * In both cases the matched hospital ID is stored as preferredHospital so only that
+ * hospital's dashboard will show the request. If no match is found, preferredHospital
+ * remains null and ALL hospitals see the request as a fallback.
  */
 exports.createRequest = asyncHandler(async (req, res) => {
-  const { bloodGroup, quantity, emergencyLevel, location, hospitalName, description } = req.body;
+  const {
+    bloodGroup,
+    quantity,
+    emergencyLevel,
+    location,
+    hospitalName,
+    description,
+    presenceMode,
+    preferredHospital: preferredHospitalId,
+    hospitalLocation,
+  } = req.body;
+
   const user = await User.findById(req.user.id);
 
   if (user.role === "hospital") {
@@ -39,6 +56,62 @@ exports.createRequest = asyncHandler(async (req, res) => {
     });
   }
 
+  const mode = presenceMode === "remote" ? "remote" : "at_hospital";
+
+  // ── Resolve preferredHospital ────────────────────────────────────────────────
+  let resolvedHospitalId = null;
+  let resolvedHospitalLocation = null;
+
+  if (mode === "remote") {
+    // Remote mode: receiver explicitly selected a hospital
+    if (!preferredHospitalId) {
+      return res.status(400).json({
+        success: false,
+        message: "Please select a hospital when submitting a remote request.",
+      });
+    }
+    const hospitalUser = await User.findById(preferredHospitalId);
+    if (!hospitalUser || hospitalUser.role !== "hospital" || !hospitalUser.hospitalVerified) {
+      return res.status(400).json({
+        success: false,
+        message: "The selected hospital is not valid or not verified by admin.",
+      });
+    }
+    resolvedHospitalId = hospitalUser._id;
+    // Store the hospital's location for audit purposes
+    resolvedHospitalLocation = hospitalLocation || {
+      city: hospitalUser.location?.city,
+      state: hospitalUser.location?.state,
+    };
+  } else {
+    // At-hospital mode: try to auto-match nearest verified hospital by coordinates
+    const patientCoords = location?.coordinates;
+    if (patientCoords?.lat != null && patientCoords?.lng != null) {
+      // Find the nearest verified hospital using city/state as a lightweight fallback
+      // (Full geo search would require a 2dsphere index on hospital location — use city match for now)
+      const patientCity = location?.city?.toLowerCase().trim();
+      const patientState = location?.state?.toLowerCase().trim();
+
+      const nearbyHospital = await User.findOne({
+        role: "hospital",
+        hospitalVerified: true,
+        $or: [
+          { "location.city": { $regex: new RegExp(`^${patientCity}$`, "i") } },
+          { "location.state": { $regex: new RegExp(`^${patientState}$`, "i") } },
+        ],
+      }).lean();
+
+      if (nearbyHospital) {
+        resolvedHospitalId = nearbyHospital._id;
+        resolvedHospitalLocation = {
+          city: nearbyHospital.location?.city,
+          state: nearbyHospital.location?.state,
+        };
+      }
+      // If no hospital found → resolvedHospitalId stays null → visible to all hospitals (fallback)
+    }
+  }
+
   // location.coordinates.{lat, lng} is stored as-received; parseCoordinates() in the
   // donor selection service handles both flat {lat,lng} and GeoJSON formats for geo queries.
   const request = await BloodRequest.create({
@@ -49,6 +122,9 @@ exports.createRequest = asyncHandler(async (req, res) => {
     location,
     hospitalName,
     description,
+    presenceMode: mode,
+    preferredHospital: resolvedHospitalId,
+    hospitalLocation: resolvedHospitalLocation || undefined,
     status: REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL,
   });
 
@@ -64,6 +140,8 @@ exports.createRequest = asyncHandler(async (req, res) => {
       quantity: request.quantity,
       emergencyLevel: request.emergencyLevel,
       hasCoordinates: !!(location?.coordinates?.lat && location?.coordinates?.lng),
+      presenceMode: mode,
+      preferredHospital: resolvedHospitalId,
       location,
     },
     note: "Receiver submitted new blood request awaiting hospital verification",
@@ -71,13 +149,16 @@ exports.createRequest = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: "Blood request created successfully. Awaiting hospital verification.",
+    message: resolvedHospitalId
+      ? "Blood request created successfully. The designated hospital will review it shortly."
+      : "Blood request created successfully. Awaiting hospital verification.",
     data: {
       requestId: request._id,
       bloodGroup: request.bloodGroup,
       quantity: request.quantity,
       emergencyLevel: request.emergencyLevel,
       status: request.status,
+      preferredHospital: resolvedHospitalId,
     },
   });
 });
@@ -209,12 +290,24 @@ exports.myRequests = asyncHandler(async (req, res) => {
 
 /**
  * Hospital views requests pending verification checkpoint.
+ *
+ * Hospital routing:
+ *  - Returns requests where preferredHospital === this hospital's _id (designated requests).
+ *  - Also returns requests where preferredHospital === null (unmatched → visible to all hospitals
+ *    as a safety fallback, same as legacy behaviour).
  */
 exports.getHospitalRequests = asyncHandler(async (req, res) => {
+  const hospitalId = new mongoose.Types.ObjectId(req.user.id);
+
   const requests = await BloodRequest.find({
     status: REQUEST_STATUSES.PENDING_HOSPITAL_APPROVAL,
+    $or: [
+      { preferredHospital: hospitalId },   // explicitly designated to this hospital
+      { preferredHospital: null },          // unmatched — visible to all hospitals (fallback)
+    ],
   })
     .populate("requestedBy", "fullName email phoneNumber location")
+    .populate("preferredHospital", "hospitalName fullName")
     .sort({ emergencyLevel: -1, createdAt: -1 });
 
   res.status(200).json({

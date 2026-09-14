@@ -119,6 +119,39 @@ const bloodRequestSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
+
+    // ─── Receiver presence mode ───────────────────────────────────────────────
+    // "at_hospital"  → receiver is physically at the hospital; patient location = hospital location.
+    // "remote"       → receiver is elsewhere; preferredHospital is explicitly designated.
+    presenceMode: {
+      type: String,
+      enum: ["at_hospital", "remote"],
+      default: "at_hospital",
+    },
+
+    // ─── Preferred (designated) hospital ─────────────────────────────────────
+    // Set when the receiver explicitly picks a hospital (remote mode) or when the
+    // backend auto-matches the nearest verified hospital (at_hospital mode).
+    // Only this hospital's dashboard will show the request for approval.
+    // Null = no specific hospital matched → visible to ALL hospitals (fallback).
+    preferredHospital: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    // ─── Hospital location (separate from patient location) ───────────────────
+    // Stored so the admin/audit trail can see both where the patient is and
+    // where the hospital is. NOT used for donor proximity — `location` is.
+    hospitalLocation: {
+      city: String,
+      state: String,
+      coordinates: {
+        lat: Number,
+        lng: Number,
+      },
+    },
+
     matchedAt: Date,
     location: {
       city: String,
@@ -244,6 +277,8 @@ bloodRequestSchema.index({ status: 1, createdAt: -1 });
 bloodRequestSchema.index({ requestedBy: 1 });
 bloodRequestSchema.index({ bloodGroup: 1, status: 1 });
 bloodRequestSchema.index({ assignedHospital: 1, status: 1 });
+// Used by getHospitalRequests to route requests to the correct hospital
+bloodRequestSchema.index({ preferredHospital: 1, status: 1 });
 // Replaces the old donorResponseDeadline index — used by timeoutEscalationWorker sweep
 bloodRequestSchema.index({ status: 1, acceptanceDeadline: 1 });
 // Used by timeoutEscalationWorker sweep to finalize nearest donor selection when collection window expires

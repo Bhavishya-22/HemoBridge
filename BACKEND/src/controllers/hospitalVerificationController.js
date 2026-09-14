@@ -182,7 +182,7 @@ exports.getAllHospitals = asyncHandler(async (req, res) => {
         role: "hospital",
         hospitalVerified: true,
     }).select(
-        "fullName email phoneNumber hospitalName registrationNumber hospitalAddress hospitalPhone"
+        "fullName email phoneNumber hospitalName registrationNumber hospitalAddress hospitalPhone location hospitalVerified hospitalVerificationStatus"
     );
 
     return res.status(200).json({

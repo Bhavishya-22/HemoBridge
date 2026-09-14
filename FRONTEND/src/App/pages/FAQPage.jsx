@@ -60,14 +60,15 @@ export default function FAQPage() {
 
   const handleRequestAction = () => {
     if (!isLoggedIn) {
-      navigate("/login", { state: { from: "/request" } });
+      navigate("/signup");
       return;
     }
     if (user?.role === "receiver") {
       navigate("/request");
       return;
     }
-    navigate("/request");
+    // Donors / hospitals / admins can't place requests — send to signup to register as receiver
+    navigate("/signup");
   };
 
   const handleDonateAction = () => {
