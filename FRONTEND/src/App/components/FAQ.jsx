@@ -1,9 +1,12 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import "../styles/faq.css";
 import { faqData } from "../data/data";
 
 export default function FAQ() {
   const [open, setOpen] = useState(null);
+  const navigate = useNavigate();
+
   return (
     <section className="section">
       <div className="section-inner">
@@ -21,7 +24,9 @@ export default function FAQ() {
           ))}
         </div>
         <div className="faq-cta">
-          <button className="btn-ghost">View all FAQs →</button>
+          <button className="btn-ghost" onClick={() => navigate("/faq")}>
+            View all FAQs →
+          </button>
         </div>
       </div>
     </section>

@@ -1,6 +1,11 @@
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import '../styles/eligibility.css';
 
 export default function Eligibility() {
+  const navigate = useNavigate();
+  const { isLoggedIn } = useAuth();
+
   const reqs = [
     "Age between 18 and 65 years",
     "Body weight above 50 kg",
@@ -9,6 +14,11 @@ export default function Eligibility() {
     "No recent tattoo or piercing (within 12 months)",
     "Not currently on antibiotics or blood thinners",
   ];
+
+  const handleLearnMore = () => {
+    navigate("/faq");
+  };
+
   return (
     <section className="section eligibility-bg">
       <div className="section-inner">
@@ -25,7 +35,9 @@ export default function Eligibility() {
                 </div>
               ))}
             </div>
-            <button className="btn-hero-primary">Learn more about eligibility</button>
+            <button className="btn-hero-primary" onClick={handleLearnMore}>
+              Learn more about eligibility
+            </button>
           </div>
           <div className="elig-visual">
             <div className="elig-big-num">1 in 3</div>

@@ -28,9 +28,11 @@ body {
 
 /* ── LAYOUT ── */
 .auth-page {
-  min-height: 100vh;
+  min-height: calc(100vh - 68px);
+  margin-top: 68px;
   display: grid;
   grid-template-columns: 1fr 1fr;
+  box-sizing: border-box;
 }
 
 /* ── CARD (left column) ── */

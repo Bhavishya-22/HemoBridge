@@ -5,16 +5,6 @@ import { getNavLinksForRole } from "../../utils/roleAccess";
 import { API_BASE } from "../../config/api";
 import "../styles/navbar.css";
 
-function getDeepLink(notification, userRole) {
-  const relatedRequestId =
-    notification.relatedRequest?._id || notification.relatedRequest;
-  if (!relatedRequestId) return null;
-
-  if (userRole === "hospital") return "/hospital/dashboard";
-  if (userRole === "donor") return `/donate?requestId=${relatedRequestId}`;
-  if (userRole === "receiver") return `/request-blood?requestId=${relatedRequestId}`;
-  return null;
-}
 
 function timeAgo(dateStr) {
   const diff = (Date.now() - new Date(dateStr).getTime()) / 1000;
@@ -24,8 +14,7 @@ function timeAgo(dateStr) {
   return `${Math.floor(diff / 86400)}d ago`;
 }
 
-function NotificationBell({ user }) {
-  const navigate = useNavigate();
+function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -92,19 +81,14 @@ function NotificationBell({ user }) {
   };
 
   const handleClickNotification = async (n) => {
-    // Mark as read (deleted from DB)
+    // Mark as read (deleted from DB) — no navigation, just dismiss
     await fetch(`${API_BASE}/notifications/${n.id}/read`, {
       method: "PATCH",
       credentials: "include",
     });
     setNotifications((prev) => prev.filter((item) => item.id !== n.id));
     setUnreadCount((c) => Math.max(0, c - 1));
-
-    const link = getDeepLink(n, user?.role);
-    if (link) {
-      setOpen(false);
-      navigate(link);
-    }
+    // Dropdown stays open so user can read all notifications
   };
 
   return (
@@ -198,7 +182,7 @@ export default function Navbar() {
       </div>
 
       <div className="nav-actions">
-        {!checkingAuth && isLoggedIn && <NotificationBell user={user} />}
+        {!checkingAuth && isLoggedIn && <NotificationBell />}
         {!checkingAuth && !isLoggedIn && (
           <Link to="/login">
             <button className="btn-ghost">Login</button>

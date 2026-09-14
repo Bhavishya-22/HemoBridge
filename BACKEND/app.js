@@ -11,6 +11,7 @@ const requestRouter = require('./src/routes/requestRouter');
 const donationRouter = require('./src/routes/donationRouter');
 const hospitalRouter = require('./src/routes/hospitalRouter');
 const notificationRouter = require('./src/routes/notificationRouter');
+const statsRouter = require('./src/routes/statsRouter');
 const { startTimeoutWorker, stopTimeoutWorker } = require('./src/utils/timeoutEscalationWorker');
 const ensureAdminUser = require('./src/utils/ensureAdminUser');
 
@@ -53,6 +54,7 @@ app.use('/', requestRouter);
 app.use('/', donationRouter);
 app.use('/', hospitalRouter);
 app.use('/', notificationRouter);
+app.use('/', statsRouter);
 app.use('/', adminRouter);
 
 // 404 handler
@@ -109,3 +111,4 @@ const handleShutdown = () => {
 
 process.on('SIGINT', handleShutdown);
 process.on('SIGTERM', handleShutdown);
+// reload trigger

@@ -47,11 +47,6 @@ export default function SignupPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-brand">
-          <span className="auth-brand-icon">🩸</span>
-          <span className="auth-brand-name">Blood<span>Bank</span></span>
-        </div>
-
         <div className="auth-header">
           <h1 className="auth-title">Create an account</h1>
           <p className="auth-sub">Join thousands of donors making a difference.</p>

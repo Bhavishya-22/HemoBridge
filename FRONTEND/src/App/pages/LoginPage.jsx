@@ -72,13 +72,6 @@ export default function LoginPage() {
       </div>
 
       <div className="auth-card">
-        <div className="auth-brand">
-          <span className="auth-brand-icon">🩸</span>
-          <span className="auth-brand-name">
-            Blood<span>Bank</span>
-          </span>
-        </div>
-
         <div className="auth-header">
           <h1 className="auth-title">Welcome back</h1>
           <p className="auth-sub">Log in to your account to continue.</p>

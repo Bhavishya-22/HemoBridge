@@ -1,6 +1,14 @@
-import '../styles/footer.css'
+import { Link } from 'react-router-dom';
+import '../styles/footer.css';
 
 export default function Footer() {
+  const quickLinks = [
+    { label: "Home", path: "/" },
+    { label: "Donate blood", path: "/donate" },
+    { label: "Request blood", path: "/request" },
+    { label: "FAQ & Eligibility", path: "/faq" },
+  ];
+
   return (
     <footer className="footer">
       <div className="footer-inner">
@@ -17,24 +25,26 @@ export default function Footer() {
           <div>
             <div className="footer-col-title">Quick links</div>
             <ul className="footer-links">
-              {["Home", "Donate blood", "Request blood", "Awareness", "FAQ"].map(l => (
-                <li key={l}><a href="#">{l}</a></li>
+              {quickLinks.map((item) => (
+                <li key={item.label}>
+                  <Link to={item.path}>{item.label}</Link>
+                </li>
               ))}
             </ul>
           </div>
           <div>
             <div className="footer-col-title">Contact</div>
             <ul className="footer-links">
-              <li><a href="#">📧 help@bloodbank.in</a></li>
-              <li><a href="#">📞 1800-XXX-XXXX</a></li>
-              <li><a href="#">📍 Hyderabad, India</a></li>
+              <li><a href="mailto:help@bloodbank.in">📧 help@bloodbank.in</a></li>
+              <li><a href="tel:1800123456">📞 1800-123-456</a></li>
+              <li><span>📍 Hyderabad, India</span></li>
             </ul>
           </div>
           <div>
             <div className="footer-col-title">Legal</div>
             <ul className="footer-links">
-              {["Privacy policy", "Terms of use", "Cookie policy"].map(l => (
-                <li key={l}><a href="#">{l}</a></li>
+              {["Privacy policy", "Terms of use", "Donor guidelines"].map((l) => (
+                <li key={l}><a href="#!">{l}</a></li>
               ))}
             </ul>
           </div>

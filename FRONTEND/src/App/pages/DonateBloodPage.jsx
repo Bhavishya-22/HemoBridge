@@ -8,19 +8,14 @@ import "../styles/bloodFlow.css";
 
 function extractDonorCoords(loc) {
   if (!loc) return null;
-  if (typeof loc.lat === "number" && typeof loc.lng === "number") {
-    return { lat: loc.lat, lng: loc.lng };
-  }
+  if (typeof loc.lat === "number" && typeof loc.lng === "number") return { lat: loc.lat, lng: loc.lng };
   if (loc.coordinates) {
-    if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number") {
+    if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number")
       return { lat: loc.coordinates.lat, lng: loc.coordinates.lng };
-    }
-    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2) {
+    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2)
       return { lat: loc.coordinates.coordinates[1], lng: loc.coordinates.coordinates[0] };
-    }
-    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2)
       return { lat: loc.coordinates[1], lng: loc.coordinates[0] };
-    }
   }
   return null;
 }
@@ -49,15 +44,8 @@ export default function DonateBloodPage() {
         fetch(`${API_BASE}/requests/view`, { credentials: "include" }),
         fetch(`${API_BASE}/donor/my-acceptances`, { credentials: "include" }),
       ]);
-
-      if (viewRes.ok) {
-        const data = await viewRes.json();
-        setOpenRequests(data.requests || []);
-      }
-      if (mineRes.ok) {
-        const data = await mineRes.json();
-        setMyAssignments(data.data || []);
-      }
+      if (viewRes.ok) { const d = await viewRes.json(); setOpenRequests(d.requests || []); }
+      if (mineRes.ok) { const d = await mineRes.json(); setMyAssignments(d.data || []); }
     } catch (err) {
       console.error("Donate page load error:", err);
     } finally {
@@ -65,35 +53,23 @@ export default function DonateBloodPage() {
     }
   };
 
-  useEffect(() => {
-    loadData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
   const handleOpenDetails = async (requestId) => {
     setDetailModalOpen(true);
     setDetailLoading(true);
     setDetailError("");
     try {
-      const res = await fetch(`${API_BASE}/requests/${requestId}/detail`, {
-        credentials: "include",
-      });
+      const res = await fetch(`${API_BASE}/requests/${requestId}/detail`, { credentials: "include" });
       const data = await res.json();
-      if (res.ok && data.data) {
-        setSelectedDetail(data.data);
-      } else {
-        setDetailError(data.message || "Failed to load request details.");
-      }
-    } catch {
-      setDetailError("Unable to connect to server.");
-    } finally {
-      setDetailLoading(false);
-    }
+      if (res.ok && data.data) setSelectedDetail(data.data);
+      else setDetailError(data.message || "Failed to load request details.");
+    } catch { setDetailError("Unable to connect to server."); }
+    finally { setDetailLoading(false); }
   };
 
   useEffect(() => {
-    if (deepLinkRequestId) {
-      handleOpenDetails(deepLinkRequestId);
-    }
+    if (deepLinkRequestId) handleOpenDetails(deepLinkRequestId);
   }, [deepLinkRequestId]);
 
   const handleAccept = async (requestId) => {
@@ -101,47 +77,17 @@ export default function DonateBloodPage() {
     setActionMsg({ type: "", text: "" });
     try {
       const res = await fetch(`${API_BASE}/requests/${requestId}/accept`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
       });
       const data = await res.json();
-
-      if (res.status === 409) {
-        setActionMsg({
-          type: "error",
-          text: data.message || "This request was just matched by another donor. Refreshing...",
-        });
-        await loadData();
-        return;
-      }
-      if (res.status === 410) {
-        setActionMsg({
-          type: "error",
-          text: data.message || "Acceptance window expired — request is being re-broadcast.",
-        });
-        await loadData();
-        return;
-      }
-      if (res.status === 403) {
-        setActionMsg({
-          type: "error",
-          text: data.message || "You are not an eligible candidate for this request.",
-        });
-        return;
-      }
-      if (!res.ok) {
-        setActionMsg({ type: "error", text: data.message || "Could not accept request." });
-        return;
-      }
-
-      setActionMsg({ type: "success", text: data.message || "Request accepted successfully! You are now matched." });
+      if (res.status === 409) { setActionMsg({ type: "error", text: data.message || "Request just matched by another donor." }); await loadData(); return; }
+      if (res.status === 410) { setActionMsg({ type: "error", text: data.message || "Acceptance window expired." }); await loadData(); return; }
+      if (res.status === 403) { setActionMsg({ type: "error", text: data.message || "Not eligible for this request." }); return; }
+      if (!res.ok) { setActionMsg({ type: "error", text: data.message || "Could not accept request." }); return; }
+      setActionMsg({ type: "success", text: data.message || "Request accepted! You are now matched." });
       await loadData();
-    } catch {
-      setActionMsg({ type: "error", text: "Unable to connect to server. Please try again." });
-    } finally {
-      setBusyId(null);
-    }
+    } catch { setActionMsg({ type: "error", text: "Unable to connect to server. Please try again." }); }
+    finally { setBusyId(null); }
   };
 
   const handleDecline = async (requestId) => {
@@ -149,188 +95,174 @@ export default function DonateBloodPage() {
     setActionMsg({ type: "", text: "" });
     try {
       const res = await fetch(`${API_BASE}/requests/${requestId}/decline`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ rejectionReason: "Donor declined from dashboard" }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setActionMsg({ type: "error", text: data.message || "Could not decline request." });
-        return;
-      }
+      if (!res.ok) { setActionMsg({ type: "error", text: data.message || "Could not decline request." }); return; }
       setActionMsg({ type: "success", text: data.message || "Request declined." });
       await loadData();
-    } catch {
-      setActionMsg({ type: "error", text: "Unable to connect to server." });
-    } finally {
-      setBusyId(null);
-    }
+    } catch { setActionMsg({ type: "error", text: "Unable to connect to server." }); }
+    finally { setBusyId(null); }
   };
 
   return (
     <div className="flow-page">
+      {/* Page header */}
       <header className="flow-header">
-        <h1 className="flow-title">Donate blood</h1>
+        <h1 className="flow-title">Donate Blood</h1>
         <p className="flow-sub">
-          Below are open blood requests compatible with your blood group near you.
-          Accept to commit to donating — first valid response is matched.
+          Open blood requests compatible with your blood group near you are listed below.
+          Accept to commit to donating — first valid response wins the match.
         </p>
       </header>
 
+      {/* Action alert */}
       {actionMsg.text && (
-        <div className={`flow-alert ${actionMsg.type}`} style={{ maxWidth: 1100, margin: "0 auto 1rem" }}>
+        <div className={`flow-alert ${actionMsg.type}`}>
           {actionMsg.text}
         </div>
       )}
 
-      {loading ? (
-        <div className="flow-loading">
-          <span className="flow-spinner" />
-        </div>
-      ) : (
-        <div className="flow-grid" style={{ gridTemplateColumns: "1fr" }}>
-          <section className="flow-card">
-            <h2>Open requests near you</h2>
-            {openRequests.length > 0 && (
-              <DonationRequestsMap
-                donorCoords={extractDonorCoords(user?.location)}
-                requests={openRequests}
-                onAccept={handleAccept}
-                busyId={busyId}
-              />
-            )}
-            {openRequests.length === 0 ? (
-              <div className="flow-empty">
-                No open compatible requests at this time. You will see open requests here when hospital-approved requests match your blood group.
-              </div>
-            ) : (
-              <div className="flow-list">
-                {openRequests.map((req) => {
-                  const recipient = req.requestedBy?.fullName || "Patient in need";
-                  const loc = req.location || req.requestedBy?.location;
-                  const distanceDisplay =
-                    typeof req.distanceKm === "number"
-                      ? `${req.distanceKm.toFixed(1)} km away`
-                      : null;
+      {/* Content */}
+      <div className="flow-content">
+        {loading ? (
+          <div className="flow-loading">
+            <span className="flow-spinner" />
+          </div>
+        ) : (
+          <div className="flow-grid single-col">
+            <section className="flow-card">
+              <h2>Open requests near you</h2>
 
-                  return (
-                    <article key={req._id} className="flow-request-item">
-                      <div className="flow-request-top">
-                        <span className="flow-badge blood">{req.bloodGroup}</span>
-                        <span className={`flow-badge emergency-${req.emergencyLevel}`}>
-                          {req.emergencyLevel}
-                        </span>
-                        <span className="flow-badge status">{formatRequestStatus(req.status)}</span>
-                        {distanceDisplay && (
-                          <span className="flow-badge" style={{ background: "#e0f2fe", color: "#0369a1" }}>
-                            📍 {distanceDisplay}
-                          </span>
-                        )}
-                      </div>
+              {openRequests.length > 0 && (
+                <DonationRequestsMap
+                  donorCoords={extractDonorCoords(user?.location)}
+                  requests={openRequests}
+                  onAccept={handleAccept}
+                  busyId={busyId}
+                />
+              )}
 
-                      <p className="flow-meta">
-                        {req.quantity} unit{req.quantity > 1 ? "s" : ""} needed for <strong>{recipient}</strong>
-                      </p>
-                      <p className="flow-meta">
-                        Location: {loc?.city || "—"}, {loc?.state || "—"}
-                        {req.hospitalName ? ` · Hospital: ${req.hospitalName}` : ""}
-                      </p>
-                      {req.description && <p className="flow-meta">{req.description}</p>}
-                      {req.acceptanceDeadline && (
-                        <p className="flow-meta" style={{ color: "#d97706", fontWeight: 500 }}>
-                          ⏳ Open until: {new Date(req.acceptanceDeadline).toLocaleString()}
+              {openRequests.length === 0 ? (
+                <div className="flow-empty">
+                  No open compatible requests right now.<br />
+                  You'll see requests here when hospital-approved requests match your blood group.
+                </div>
+              ) : (
+                <div className="flow-list">
+                  {openRequests.map((req) => {
+                    const recipient = req.requestedBy?.fullName || "Patient in need";
+                    const loc = req.location || req.requestedBy?.location;
+                    const distanceDisplay =
+                      typeof req.distanceKm === "number" ? `${req.distanceKm.toFixed(1)} km away` : null;
+
+                    return (
+                      <article key={req._id} className="flow-request-item">
+                        <div className="flow-request-top">
+                          <span className="flow-badge blood">{req.bloodGroup}</span>
+                          <span className={`flow-badge emergency-${req.emergencyLevel}`}>{req.emergencyLevel}</span>
+                          <span className="flow-badge status">{formatRequestStatus(req.status)}</span>
+                          {distanceDisplay && (
+                            <span className="flow-badge" style={{ background: "#e0f2fe", color: "#0369a1" }}>
+                              📍 {distanceDisplay}
+                            </span>
+                          )}
+                        </div>
+                        <p className="flow-meta">
+                          <strong>{req.quantity} unit{req.quantity > 1 ? "s" : ""}</strong> needed for <strong>{recipient}</strong>
                         </p>
-                      )}
-
-                      <div className="flow-actions">
-                        <button
-                          type="button"
-                          className="flow-btn"
-                          disabled={busyId === req._id}
-                          onClick={() => handleAccept(req._id)}
-                        >
-                          {busyId === req._id ? "Processing..." : "Accept Request"}
-                        </button>
-                        <button
-                          type="button"
-                          className="flow-btn danger"
-                          disabled={busyId === req._id}
-                          onClick={() => handleDecline(req._id)}
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-
-            <h3 className="flow-section-title">Your matched & ongoing donations</h3>
-            {myAssignments.length === 0 ? (
-              <div className="flow-empty">No active or ongoing donations yet.</div>
-            ) : (
-              <div className="flow-list">
-                {myAssignments.map((req) => {
-                  const recipient = req.requestedBy?.fullName || "Patient";
-                  const loc = req.location || req.requestedBy?.location;
-                  const isConfirmedForMe =
-                    (req.confirmedDonor?._id || req.confirmedDonor)?.toString() === userId?.toString();
-
-                  return (
-                    <article key={req._id} className="flow-request-item">
-                      <div className="flow-request-top">
-                        <span className="flow-badge blood">{req.bloodGroup}</span>
-                        <span className={`flow-badge emergency-${req.emergencyLevel}`}>
-                          {req.emergencyLevel}
-                        </span>
-                        <span className="flow-badge status">{formatRequestStatus(req.status)}</span>
-                        {isConfirmedForMe && (
-                          <span className="flow-badge" style={{ background: "#dcfce7", color: "#166534" }}>
-                            ✅ Matched to You
-                          </span>
+                        <p className="flow-meta">
+                          📍 {loc?.city || "—"}, {loc?.state || "—"}
+                          {req.hospitalName ? ` · 🏥 ${req.hospitalName}` : ""}
+                        </p>
+                        {req.description && <p className="flow-meta">{req.description}</p>}
+                        {req.acceptanceDeadline && (
+                          <p className="flow-meta" style={{ color: "#d97706", fontWeight: 500 }}>
+                            ⏳ Open until: {new Date(req.acceptanceDeadline).toLocaleString()}
+                          </p>
                         )}
-                      </div>
-                      <p className="flow-meta">
-                        {req.quantity} unit{req.quantity > 1 ? "s" : ""} for <strong>{recipient}</strong>
-                      </p>
-                      <p className="flow-meta">
-                        Location: {loc?.city || "—"}, {loc?.state || "—"}
-                        {req.hospitalName ? ` · Hospital: ${req.hospitalName}` : ""}
-                      </p>
-                      <p className="flow-meta">
-                        Matched on: {req.matchedAt ? new Date(req.matchedAt).toLocaleString() : new Date(req.updatedAt).toLocaleString()}
-                      </p>
+                        <div className="flow-actions">
+                          <button
+                            type="button"
+                            className="flow-btn"
+                            disabled={busyId === req._id}
+                            onClick={() => handleAccept(req._id)}
+                          >
+                            {busyId === req._id ? "Processing…" : "✓ Accept Request"}
+                          </button>
+                          <button
+                            type="button"
+                            className="flow-btn danger"
+                            disabled={busyId === req._id}
+                            onClick={() => handleDecline(req._id)}
+                          >
+                            ✕ Decline
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
 
-                      <div className="flow-actions">
-                        <button
-                          type="button"
-                          className="flow-btn"
-                          onClick={() => handleOpenDetails(req._id)}
-                        >
-                          📋 Details
-                        </button>
-                      </div>
-                    </article>
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        </div>
-      )}
+              <h3 className="flow-section-title">Your matched &amp; ongoing donations</h3>
+              {myAssignments.length === 0 ? (
+                <div className="flow-empty">No active or ongoing donations yet.</div>
+              ) : (
+                <div className="flow-list">
+                  {myAssignments.map((req) => {
+                    const recipient = req.requestedBy?.fullName || "Patient";
+                    const loc = req.location || req.requestedBy?.location;
+                    const isConfirmedForMe =
+                      (req.confirmedDonor?._id || req.confirmedDonor)?.toString() === userId?.toString();
 
+                    return (
+                      <article key={req._id} className="flow-request-item">
+                        <div className="flow-request-top">
+                          <span className="flow-badge blood">{req.bloodGroup}</span>
+                          <span className={`flow-badge emergency-${req.emergencyLevel}`}>{req.emergencyLevel}</span>
+                          <span className="flow-badge status">{formatRequestStatus(req.status)}</span>
+                          {isConfirmedForMe && (
+                            <span className="flow-badge" style={{ background: "#dcfce7", color: "#166534" }}>
+                              ✅ Matched to You
+                            </span>
+                          )}
+                        </div>
+                        <p className="flow-meta">
+                          <strong>{req.quantity} unit{req.quantity > 1 ? "s" : ""}</strong> for <strong>{recipient}</strong>
+                        </p>
+                        <p className="flow-meta">
+                          📍 {loc?.city || "—"}, {loc?.state || "—"}
+                          {req.hospitalName ? ` · 🏥 ${req.hospitalName}` : ""}
+                        </p>
+                        <p className="flow-meta">
+                          Matched: {req.matchedAt
+                            ? new Date(req.matchedAt).toLocaleString()
+                            : new Date(req.updatedAt).toLocaleString()}
+                        </p>
+                        <div className="flow-actions">
+                          <button type="button" className="flow-btn" onClick={() => handleOpenDetails(req._id)}>
+                            📋 View Details
+                          </button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              )}
+            </section>
+          </div>
+        )}
+      </div>
+
+      {/* Detail Modal */}
       {detailModalOpen && (
         <div className="flow-modal-backdrop" onClick={() => setDetailModalOpen(false)}>
           <div className="flow-modal" onClick={(e) => e.stopPropagation()}>
             <div className="flow-modal-header">
               <h3 className="flow-modal-title">Matched Donation Details</h3>
-              <button
-                className="flow-modal-close"
-                onClick={() => setDetailModalOpen(false)}
-                title="Close"
-              >
+              <button className="flow-modal-close" onClick={() => setDetailModalOpen(false)} title="Close">
                 &times;
               </button>
             </div>
@@ -357,9 +289,7 @@ export default function DonateBloodPage() {
                           <a href={`tel:${selectedDetail.receiver.phoneNumber}`} style={{ color: "#b91c1c", textDecoration: "underline" }}>
                             📞 {selectedDetail.receiver.phoneNumber}
                           </a>
-                        ) : (
-                          "Available on selection"
-                        )}
+                        ) : "Not provided"}
                       </span>
                     </div>
                     {selectedDetail.receiver?.location?.city && (
@@ -383,14 +313,14 @@ export default function DonateBloodPage() {
                       </span>
                     </div>
                     <div className="flow-detail-row">
-                      <span className="flow-detail-label">Hospital Address</span>
+                      <span className="flow-detail-label">Address</span>
                       <span className="flow-detail-value">
-                        {selectedDetail.assignedHospital?.hospitalAddress || "Address provided by hospital"}
+                        {selectedDetail.assignedHospital?.hospitalAddress || "Provided by hospital"}
                       </span>
                     </div>
                     {selectedDetail.assignedHospital?.hospitalPhone && (
                       <div className="flow-detail-row">
-                        <span className="flow-detail-label">Hospital Contact</span>
+                        <span className="flow-detail-label">Contact</span>
                         <span className="flow-detail-value">
                           <a href={`tel:${selectedDetail.assignedHospital.hospitalPhone}`} style={{ color: "#b91c1c", textDecoration: "underline" }}>
                             📞 {selectedDetail.assignedHospital.hospitalPhone}
@@ -407,7 +337,7 @@ export default function DonateBloodPage() {
                       <span className="flow-badge blood">{selectedDetail.bloodGroup}</span>
                     </div>
                     <div className="flow-detail-row">
-                      <span className="flow-detail-label">Quantity Required</span>
+                      <span className="flow-detail-label">Quantity</span>
                       <span className="flow-detail-value">{selectedDetail.quantity} unit(s)</span>
                     </div>
                     <div className="flow-detail-row">
@@ -417,7 +347,7 @@ export default function DonateBloodPage() {
                       </span>
                     </div>
                     <div className="flow-detail-row">
-                      <span className="flow-detail-label">Current Status</span>
+                      <span className="flow-detail-label">Status</span>
                       <span className="flow-badge status">{formatRequestStatus(selectedDetail.status)}</span>
                     </div>
                   </div>
@@ -426,13 +356,7 @@ export default function DonateBloodPage() {
             </div>
 
             <div className="flow-modal-footer">
-              <button
-                type="button"
-                className="flow-btn"
-                onClick={() => setDetailModalOpen(false)}
-              >
-                Close
-              </button>
+              <button type="button" className="flow-btn" onClick={() => setDetailModalOpen(false)}>Close</button>
             </div>
           </div>
         </div>

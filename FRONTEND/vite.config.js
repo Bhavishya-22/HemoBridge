@@ -13,6 +13,8 @@ const apiPrefixes = [
   'receiver',
   'donations',
   'hospitals',
+  'stats',
+  'health',
 ]
 
 // https://vite.dev/config/

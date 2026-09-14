@@ -9,19 +9,14 @@ import "../styles/bloodFlow.css";
 
 function extractCoords(loc) {
   if (!loc) return null;
-  if (typeof loc.lat === "number" && typeof loc.lng === "number") {
-    return { lat: loc.lat, lng: loc.lng };
-  }
+  if (typeof loc.lat === "number" && typeof loc.lng === "number") return { lat: loc.lat, lng: loc.lng };
   if (loc.coordinates) {
-    if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number") {
+    if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number")
       return { lat: loc.coordinates.lat, lng: loc.coordinates.lng };
-    }
-    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2) {
+    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2)
       return { lat: loc.coordinates.coordinates[1], lng: loc.coordinates.coordinates[0] };
-    }
-    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2)
       return { lat: loc.coordinates[1], lng: loc.coordinates[0] };
-    }
   }
   return null;
 }
@@ -61,64 +56,40 @@ export default function RequestBloodPage() {
     setDetailLoading(true);
     setDetailError("");
     try {
-      const res = await fetch(`${API_BASE}/requests/${requestId}/detail`, {
-        credentials: "include",
-      });
+      const res = await fetch(`${API_BASE}/requests/${requestId}/detail`, { credentials: "include" });
       const data = await res.json();
-      if (res.ok && data.data) {
-        setSelectedDetail(data.data);
-      } else {
-        setDetailError(data.message || "Failed to load request details.");
-      }
-    } catch {
-      setDetailError("Unable to connect to server.");
-    } finally {
-      setDetailLoading(false);
-    }
+      if (res.ok && data.data) setSelectedDetail(data.data);
+      else setDetailError(data.message || "Failed to load request details.");
+    } catch { setDetailError("Unable to connect to server."); }
+    finally { setDetailLoading(false); }
   };
 
   useEffect(() => {
-    if (deepLinkRequestId) {
-      handleOpenDetails(deepLinkRequestId);
-    }
+    if (deepLinkRequestId) handleOpenDetails(deepLinkRequestId);
   }, [deepLinkRequestId]);
 
   const loadMyRequests = async () => {
     try {
       const res = await fetch(`${API_BASE}/requests/my-requests`, { credentials: "include" });
-      if (res.ok) {
-        const data = await res.json();
-        setMyRequests(data.requests || []);
-      }
-    } catch (err) {
-      console.error("Failed to load requests:", err);
-    } finally {
-      setLoadingList(false);
-    }
+      if (res.ok) { const data = await res.json(); setMyRequests(data.requests || []); }
+    } catch (err) { console.error("Failed to load requests:", err); }
+    finally { setLoadingList(false); }
   };
 
   useEffect(() => {
-    // Acquire geolocation if supported
+    // Geolocation
     if (typeof navigator !== "undefined" && navigator.geolocation) {
-      setCoords((prev) => ({ ...prev, status: "acquiring" }));
+      setCoords((p) => ({ ...p, status: "acquiring" }));
       navigator.geolocation.getCurrentPosition(
-        (pos) => {
-          setCoords({
-            lat: pos.coords.latitude,
-            lng: pos.coords.longitude,
-            status: "granted",
-          });
-        },
-        (err) => {
-          console.warn("Geolocation not granted:", err.message);
-          setCoords((prev) => ({ ...prev, status: "denied" }));
-        },
+        (pos) => setCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude, status: "granted" }),
+        (err) => { console.warn("Geolocation:", err.message); setCoords((p) => ({ ...p, status: "denied" })); },
         { timeout: 8000 }
       );
     } else {
-      setCoords((prev) => ({ ...prev, status: "unavailable" }));
+      setCoords((p) => ({ ...p, status: "unavailable" }));
     }
 
+    // Prefill from profile
     const prefill = async () => {
       try {
         const res = await fetch(`${API_BASE}/user/profile`, { credentials: "include" });
@@ -132,20 +103,16 @@ export default function RequestBloodPage() {
             state: u?.location?.state || prev.state,
           }));
         }
-      } catch {
-        /* ignore */
-      }
+      } catch { /* ignore */ }
     };
+
     prefill();
     loadMyRequests();
   }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setForm((prev) => ({
-      ...prev,
-      [name]: name === "quantity" ? Number(value) : value,
-    }));
+    setForm((prev) => ({ ...prev, [name]: name === "quantity" ? Number(value) : value }));
   };
 
   const handleSubmit = async (e) => {
@@ -181,231 +148,191 @@ export default function RequestBloodPage() {
         }),
       });
       const data = await res.json();
-      if (!res.ok) {
-        setMessage({ type: "error", text: data.message || "Could not create request." });
-        return;
-      }
-      setMessage({
-        type: "success",
-        text: data.message || "Request submitted. A hospital will verify it next.",
-      });
-      setForm((prev) => ({
-        ...EMPTY_FORM,
-        bloodGroup: prev.bloodGroup,
-        city: prev.city,
-        state: prev.state,
-      }));
+      if (!res.ok) { setMessage({ type: "error", text: data.message || "Could not create request." }); return; }
+      setMessage({ type: "success", text: data.message || "Request submitted! A hospital will verify it next." });
+      setForm((prev) => ({ ...EMPTY_FORM, bloodGroup: prev.bloodGroup, city: prev.city, state: prev.state }));
       await loadMyRequests();
-    } catch {
-      setMessage({ type: "error", text: "Unable to connect to server. Please try again." });
-    } finally {
-      setSubmitting(false);
-    }
+    } catch { setMessage({ type: "error", text: "Unable to connect to server. Please try again." }); }
+    finally { setSubmitting(false); }
   };
+
+  const geoStatusMsg = {
+    acquiring: "🔵 Detecting your location…",
+    granted: `🟢 Location captured: ${coords.lat?.toFixed(4)}°, ${coords.lng?.toFixed(4)}°`,
+    denied: "🟡 Location permission denied — map pin will be used.",
+    unavailable: "🟡 Geolocation unavailable — map pin will be used.",
+  }[coords.status] || "";
 
   return (
     <div className="flow-page">
+      {/* Page header */}
       <header className="flow-header">
-        <h1 className="flow-title">Request blood</h1>
+        <h1 className="flow-title">Request Blood</h1>
         <p className="flow-sub">
-          Submit an urgent or planned request. After hospital approval, eligible donors near you are notified.
+          Submit an urgent or planned blood request. After hospital approval, eligible donors near you are notified automatically.
         </p>
       </header>
 
-      <div className="flow-grid">
-        <section className="flow-card">
-          <h2>New request</h2>
-          {message.text && (
-            <div className={`flow-alert ${message.type}`} role="alert">
-              {message.text}
-            </div>
-          )}
-          <form className="flow-form" onSubmit={handleSubmit}>
-            <div className="flow-row">
+      {/* Content */}
+      <div className="flow-content">
+        <div className="flow-grid">
+
+          {/* ── Left: New Request Form ── */}
+          <section className="flow-card">
+            <h2>New request</h2>
+            {message.text && (
+              <div className={`flow-alert ${message.type}`} role="alert">
+                {message.text}
+              </div>
+            )}
+            <form className="flow-form" onSubmit={handleSubmit}>
+              <div className="flow-row">
+                <div className="flow-field">
+                  <label htmlFor="bloodGroup">Blood group</label>
+                  <select id="bloodGroup" name="bloodGroup" value={form.bloodGroup} onChange={handleChange} required>
+                    <option value="">Select</option>
+                    {BLOOD_GROUPS.map((g) => <option key={g} value={g}>{g}</option>)}
+                  </select>
+                </div>
+                <div className="flow-field">
+                  <label htmlFor="quantity">Units needed</label>
+                  <input
+                    id="quantity" name="quantity" type="number"
+                    min={1} max={10} value={form.quantity} onChange={handleChange} required
+                  />
+                </div>
+              </div>
+
               <div className="flow-field">
-                <label htmlFor="bloodGroup">Blood group</label>
-                <select
-                  id="bloodGroup"
-                  name="bloodGroup"
-                  value={form.bloodGroup}
-                  onChange={handleChange}
-                  required
-                >
-                  <option value="">Select</option>
-                  {BLOOD_GROUPS.map((g) => (
-                    <option key={g} value={g}>
-                      {g}
-                    </option>
-                  ))}
+                <label htmlFor="emergencyLevel">Emergency level</label>
+                <select id="emergencyLevel" name="emergencyLevel" value={form.emergencyLevel} onChange={handleChange}>
+                  {EMERGENCY_LEVELS.map((level) => <option key={level} value={level}>{level}</option>)}
                 </select>
               </div>
+
+              <LocationPickerMap
+                initialLat={coords.lat}
+                initialLng={coords.lng}
+                onLocationChange={({ lat, lng, city, state }) => {
+                  setCoords({ lat, lng, status: "granted" });
+                  setForm((prev) => ({ ...prev, city: city || prev.city, state: state || prev.state }));
+                }}
+                label="Patient Location (Map)"
+                height="260px"
+              />
+
+              <div className="flow-row">
+                <div className="flow-field">
+                  <label htmlFor="city">City</label>
+                  <input id="city" name="city" value={form.city} onChange={handleChange} required placeholder="e.g. Hyderabad" />
+                </div>
+                <div className="flow-field">
+                  <label htmlFor="state">State</label>
+                  <input id="state" name="state" value={form.state} onChange={handleChange} required placeholder="e.g. Telangana" />
+                </div>
+              </div>
+
+              {geoStatusMsg && (
+                <p className="flow-geo-status">{geoStatusMsg}</p>
+              )}
+
               <div className="flow-field">
-                <label htmlFor="quantity">Units needed</label>
+                <label htmlFor="hospitalName">Preferred hospital <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional)</span></label>
                 <input
-                  id="quantity"
-                  name="quantity"
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={form.quantity}
-                  onChange={handleChange}
-                  required
+                  id="hospitalName" name="hospitalName"
+                  value={form.hospitalName} onChange={handleChange}
+                  placeholder="Hospital name"
                 />
               </div>
-            </div>
 
-            <div className="flow-field">
-              <label htmlFor="emergencyLevel">Emergency level</label>
-              <select
-                id="emergencyLevel"
-                name="emergencyLevel"
-                value={form.emergencyLevel}
-                onChange={handleChange}
-              >
-                {EMERGENCY_LEVELS.map((level) => (
-                  <option key={level} value={level}>
-                    {level}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <LocationPickerMap
-              initialLat={coords.lat}
-              initialLng={coords.lng}
-              onLocationChange={({ lat, lng, city, state }) => {
-                setCoords({ lat, lng, status: "granted" });
-                setForm((prev) => ({
-                  ...prev,
-                  city: city || prev.city,
-                  state: state || prev.state,
-                }));
-              }}
-              label="Patient Location (Map)"
-              height="280px"
-            />
-
-            <div className="flow-row">
               <div className="flow-field">
-                <label htmlFor="city">City</label>
-                <input id="city" name="city" value={form.city} onChange={handleChange} required />
+                <label htmlFor="description">Additional details <span style={{ fontWeight: 400, color: "#94a3b8" }}>(optional)</span></label>
+                <textarea
+                  id="description" name="description"
+                  value={form.description} onChange={handleChange}
+                  placeholder="Patient context, ward, contact person…"
+                />
               </div>
-              <div className="flow-field">
-                <label htmlFor="state">State</label>
-                <input id="state" name="state" value={form.state} onChange={handleChange} required />
+
+              <button type="submit" className="flow-btn" disabled={submitting}>
+                {submitting ? "Submitting…" : "Submit request"}
+              </button>
+            </form>
+          </section>
+
+          {/* ── Right: My Requests List ── */}
+          <section className="flow-card">
+            <h2>Your requests</h2>
+            {loadingList ? (
+              <div className="flow-loading">
+                <span className="flow-spinner" />
               </div>
-            </div>
+            ) : myRequests.length === 0 ? (
+              <div className="flow-empty">
+                No requests yet.<br />Submit your first request using the form on the left.
+              </div>
+            ) : (
+              <div className="flow-list">
+                {myRequests.map((req) => {
+                  const matched = req.confirmedDonor || req.selectedDonor;
+                  const receiverCoords = extractCoords(req.location) || extractCoords(user?.location);
+                  const donorCoords = extractCoords(matched?.location);
 
-            <div className="flow-geo-status" style={{ fontSize: "0.85rem", marginTop: "-0.5rem", marginBottom: "0.75rem", color: "#64748b" }}>
-              {coords.status === "acquiring" && "🔵 Detecting your location..."}
-              {coords.status === "granted" && `🟢 Exact Location Captured: ${coords.lat?.toFixed(4)}°, ${coords.lng?.toFixed(4)}°`}
-              {coords.status === "denied" && "🟡 Location permission denied — pin on map will be used."}
-              {coords.status === "unavailable" && "🟡 Geolocation unavailable — pin on map will be used."}
-            </div>
-
-            <div className="flow-field">
-              <label htmlFor="hospitalName">Preferred hospital (optional)</label>
-              <input
-                id="hospitalName"
-                name="hospitalName"
-                value={form.hospitalName}
-                onChange={handleChange}
-                placeholder="Hospital name"
-              />
-            </div>
-
-            <div className="flow-field">
-              <label htmlFor="description">Additional details (optional)</label>
-              <textarea
-                id="description"
-                name="description"
-                value={form.description}
-                onChange={handleChange}
-                placeholder="Patient context, ward, contact person..."
-              />
-            </div>
-
-            <button type="submit" className="flow-btn" disabled={submitting}>
-              {submitting ? "Submitting..." : "Submit request"}
-            </button>
-          </form>
-        </section>
-
-        <section className="flow-card">
-          <h2>Your requests</h2>
-          {loadingList ? (
-            <div className="flow-loading">
-              <span className="flow-spinner" />
-            </div>
-          ) : myRequests.length === 0 ? (
-            <div className="flow-empty">No requests yet. Submit your first request on the left.</div>
-          ) : (
-            <div className="flow-list">
-              {myRequests.map((req) => {
-                const matched = req.confirmedDonor || req.selectedDonor;
-                const receiverCoords = extractCoords(req.location) || extractCoords(user?.location);
-                const donorCoords = extractCoords(matched?.location);
-
-                return (
-                  <article key={req._id} className="flow-request-item">
-                    <div className="flow-request-top">
-                      <span className="flow-badge blood">{req.bloodGroup}</span>
-                      <span className={`flow-badge emergency-${req.emergencyLevel}`}>
-                        {req.emergencyLevel}
-                      </span>
-                      <span className="flow-badge status">{formatRequestStatus(req.status)}</span>
-                    </div>
-                    <p className="flow-meta">
-                      {req.quantity} unit{req.quantity > 1 ? "s" : ""} ·{" "}
-                      {req.location?.city || "—"}, {req.location?.state || "—"}
-                    </p>
-                    {matched?.fullName && (
-                      <p className="flow-meta">
-                        Matched donor: <strong>{matched.fullName}</strong> (
-                        {matched.bloodGroup})
-                      </p>
-                    )}
-                    <p className="flow-meta">
-                      Created {new Date(req.createdAt).toLocaleString()}
-                    </p>
-
-                    {Boolean(matched && receiverCoords && donorCoords) && (
-                      <ConfirmedDonorMap
-                        receiverCoords={receiverCoords}
-                        donorCoords={donorCoords}
-                        height="200px"
-                      />
-                    )}
-
-                    {Boolean(matched || ["matched", "blood_test_scheduled", "final_completed"].includes(req.status)) && (
-                      <div className="flow-actions" style={{ marginTop: "0.75rem" }}>
-                        <button
-                          type="button"
-                          className="flow-btn"
-                          onClick={() => handleOpenDetails(req._id)}
-                        >
-                          📋 Details
-                        </button>
+                  return (
+                    <article key={req._id} className="flow-request-item">
+                      <div className="flow-request-top">
+                        <span className="flow-badge blood">{req.bloodGroup}</span>
+                        <span className={`flow-badge emergency-${req.emergencyLevel}`}>{req.emergencyLevel}</span>
+                        <span className="flow-badge status">{formatRequestStatus(req.status)}</span>
                       </div>
-                    )}
-                  </article>
-                );
-              })}
-            </div>
-          )}
-        </section>
+                      <p className="flow-meta">
+                        <strong>{req.quantity} unit{req.quantity > 1 ? "s" : ""}</strong> ·{" "}
+                        📍 {req.location?.city || "—"}, {req.location?.state || "—"}
+                      </p>
+                      {matched?.fullName && (
+                        <p className="flow-meta">
+                          ✅ Matched donor: <strong>{matched.fullName}</strong> ({matched.bloodGroup})
+                        </p>
+                      )}
+                      <p className="flow-meta" style={{ color: "#94a3b8", fontSize: "0.8rem" }}>
+                        Submitted {new Date(req.createdAt).toLocaleString()}
+                      </p>
+
+                      {Boolean(matched && receiverCoords && donorCoords) && (
+                        <ConfirmedDonorMap
+                          receiverCoords={receiverCoords}
+                          donorCoords={donorCoords}
+                          height="200px"
+                        />
+                      )}
+
+                      {Boolean(matched || ["matched", "blood_test_scheduled", "final_completed"].includes(req.status)) && (
+                        <div className="flow-actions">
+                          <button
+                            type="button"
+                            className="flow-btn"
+                            onClick={() => handleOpenDetails(req._id)}
+                          >
+                            📋 View Details
+                          </button>
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+          </section>
+        </div>
       </div>
 
+      {/* Detail Modal */}
       {detailModalOpen && (
         <div className="flow-modal-backdrop" onClick={() => setDetailModalOpen(false)}>
           <div className="flow-modal" onClick={(e) => e.stopPropagation()}>
             <div className="flow-modal-header">
-              <h3 className="flow-modal-title">Donor & Request Details</h3>
-              <button
-                className="flow-modal-close"
-                onClick={() => setDetailModalOpen(false)}
-                title="Close"
-              >
+              <h3 className="flow-modal-title">Donor &amp; Request Details</h3>
+              <button className="flow-modal-close" onClick={() => setDetailModalOpen(false)} title="Close">
                 &times;
               </button>
             </div>
@@ -434,9 +361,7 @@ export default function RequestBloodPage() {
                               <a href={`tel:${selectedDetail.confirmedDonor.phoneNumber}`} style={{ color: "#b91c1c", textDecoration: "underline" }}>
                                 📞 {selectedDetail.confirmedDonor.phoneNumber}
                               </a>
-                            ) : (
-                              "Not provided"
-                            )}
+                            ) : "Not provided"}
                           </span>
                         </div>
                         <div className="flow-detail-row">
@@ -450,12 +375,6 @@ export default function RequestBloodPage() {
                           </span>
                         </div>
                         <div className="flow-detail-row">
-                          <span className="flow-detail-label">Height</span>
-                          <span className="flow-detail-value">
-                            {selectedDetail.confirmedDonor.height ? `${selectedDetail.confirmedDonor.height} cm` : "—"}
-                          </span>
-                        </div>
-                        <div className="flow-detail-row">
                           <span className="flow-detail-label">Health Conditions</span>
                           <span className="flow-detail-value">
                             {selectedDetail.confirmedDonor.diseases?.length
@@ -465,9 +384,7 @@ export default function RequestBloodPage() {
                         </div>
                       </>
                     ) : (
-                      <p className="flow-meta" style={{ padding: "0.5rem 0" }}>
-                        Waiting for donor match.
-                      </p>
+                      <p className="flow-meta" style={{ padding: "0.5rem 0" }}>Waiting for donor match.</p>
                     )}
                   </div>
 
@@ -496,9 +413,9 @@ export default function RequestBloodPage() {
                   </div>
 
                   <div className="flow-detail-section">
-                    <div className="flow-detail-section-title">📋 Status & Request Info</div>
+                    <div className="flow-detail-section-title">📋 Status &amp; Request Info</div>
                     <div className="flow-detail-row">
-                      <span className="flow-detail-label">Current Status</span>
+                      <span className="flow-detail-label">Status</span>
                       <span className="flow-badge status">{formatRequestStatus(selectedDetail.status)}</span>
                     </div>
                     <div className="flow-detail-row">
@@ -517,13 +434,7 @@ export default function RequestBloodPage() {
             </div>
 
             <div className="flow-modal-footer">
-              <button
-                type="button"
-                className="flow-btn"
-                onClick={() => setDetailModalOpen(false)}
-              >
-                Close
-              </button>
+              <button type="button" className="flow-btn" onClick={() => setDetailModalOpen(false)}>Close</button>
             </div>
           </div>
         </div>
