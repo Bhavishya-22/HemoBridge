@@ -1,33 +1,33 @@
 import { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { attachProductionTileLayer } from "../config/mapConfig";
 
-// 1. Closest Donor Pin (Gold with ★ CLOSEST DONOR badge)
-const closestDonorPinIcon = L.divIcon({
-  className: "custom-closest-donor-pin",
+// 1. Donor Location Pin (Blue with drop shadow)
+const donorPinIcon = L.divIcon({
+  className: "custom-donor-pin",
+  html: `
+    <div style="position: relative; width: 32px; height: 42px; transform: translate(-16px, -42px);">
+      <svg viewBox="0 0 384 512" width="32" height="42" style="filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));">
+        <path fill="#2563eb" d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0z"/>
+        <circle cx="192" cy="192" r="75" fill="#ffffff"/>
+      </svg>
+    </div>
+  `,
+  iconSize: [32, 42],
+  iconAnchor: [16, 42],
+});
+
+// 2. Nearest Blood Request Pin (Gold with ★ CLOSEST badge)
+const requestPinIcon = L.divIcon({
+  className: "custom-request-pin",
   html: `
     <div style="position: relative; width: 34px; height: 44px; transform: translate(-17px, -44px);">
       <svg viewBox="0 0 384 512" width="34" height="44" style="filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));">
         <path fill="#d97706" d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0z"/>
         <circle cx="192" cy="192" r="75" fill="#ffffff"/>
       </svg>
-      <div style="position: absolute; top: -10px; right: -16px; background: #fbbf24; color: #78350f; font-size: 9px; font-weight: bold; border-radius: 10px; padding: 1px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.25); white-space: nowrap;">★ CLOSEST DONOR</div>
-    </div>
-  `,
-  iconSize: [34, 44],
-  iconAnchor: [17, 44],
-});
-
-// 2. Blood Request Pin (Red with 🩸 REQUEST badge)
-const bloodRequestPinIcon = L.divIcon({
-  className: "custom-blood-request-pin",
-  html: `
-    <div style="position: relative; width: 34px; height: 44px; transform: translate(-17px, -44px);">
-      <svg viewBox="0 0 384 512" width="34" height="44" style="filter: drop-shadow(0 3px 6px rgba(0,0,0,0.35));">
-        <path fill="#e11d48" d="M172.268 501.67C26.97 291.031 0 269.413 0 192 0 85.961 85.961 0 192 0s192 85.961 192 192c0 77.413-26.97 99.031-172.268 309.67-9.535 13.774-29.93 13.773-39.464 0z"/>
-        <circle cx="192" cy="192" r="75" fill="#ffffff"/>
-      </svg>
-      <div style="position: absolute; top: -10px; right: -12px; background: #e11d48; color: #ffffff; font-size: 9px; font-weight: bold; border-radius: 10px; padding: 1px 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.25); white-space: nowrap;">🩸 REQUEST</div>
+      <div style="position: absolute; top: -10px; right: -12px; background: #fbbf24; color: #78350f; font-size: 9px; font-weight: bold; border-radius: 10px; padding: 1px 5px; box-shadow: 0 1px 3px rgba(0,0,0,0.25); white-space: nowrap;">★ CLOSEST</div>
     </div>
   `,
   iconSize: [34, 44],
@@ -66,6 +66,7 @@ export default function DonationRequestsMap({
 
     // StrictMode guard: If a previous instance is registered or container has _leaflet_id, clean it up
     if (mapInstanceRef.current) {
+      mapInstanceRef.current.stop();
       mapInstanceRef.current.remove();
       mapInstanceRef.current = null;
     }
@@ -85,30 +86,27 @@ export default function DonationRequestsMap({
     });
     mapInstanceRef.current = map;
 
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(map);
+    // Attach production-grade CARTO Voyager tile layer with automatic fallback
+    attachProductionTileLayer(map);
 
     const bounds = L.latLngBounds([]);
 
-    // 1. Add Closest Donor marker (Gold pin with ★ CLOSEST DONOR)
+    // 1. Add Donor marker (Blue pin)
     if (donorCoords && typeof donorCoords.lat === "number" && typeof donorCoords.lng === "number") {
       const donorLatLng = [donorCoords.lat, donorCoords.lng];
-      L.marker(donorLatLng, { icon: closestDonorPinIcon })
+      L.marker(donorLatLng, { icon: donorPinIcon })
         .addTo(map)
-        .bindPopup("<strong>⭐ Closest Donor (You)</strong><br/>Your location as eligible donor.");
+        .bindPopup("<strong>📍 You (Donor)</strong><br/>Your current location.");
       bounds.extend(donorLatLng);
     }
 
-    // 2. Add Patient Blood Request marker (Red pin with 🩸 REQUEST)
+    // 2. Add ONLY the nearest request marker if it has coordinates (Gold pin)
     if (nearestRequest && nearestCoords) {
       const reqLatLng = [nearestCoords.lat, nearestCoords.lng];
       bounds.extend(reqLatLng);
 
       const marker = L.marker(reqLatLng, {
-        icon: bloodRequestPinIcon,
+        icon: requestPinIcon,
       }).addTo(map);
 
       const distanceDisplay =
@@ -134,8 +132,8 @@ export default function DonationRequestsMap({
           <div style="color: #475569; font-size: 0.82rem; margin-bottom: 6px;">
             Patient: ${nearestRequest.requestedBy?.fullName || "In Need"} · ${nearestRequest.location?.city || ""}
           </div>
-          <div style="color: #e11d48; font-size: 0.8rem; font-weight: bold; margin-bottom: 8px;">
-            📍 Patient Blood Request Location
+          <div style="color: #b45309; font-size: 0.8rem; font-weight: bold; margin-bottom: 8px;">
+            ★ Nearest match to your location!
           </div>
         </div>
       `;
@@ -145,7 +143,7 @@ export default function DonationRequestsMap({
         acceptBtn.innerText = busyId === nearestRequest._id ? "Processing..." : "Accept Request";
         acceptBtn.style.width = "100%";
         acceptBtn.style.padding = "6px 10px";
-        acceptBtn.style.background = "#e11d48";
+        acceptBtn.style.background = "#d97706";
         acceptBtn.style.color = "white";
         acceptBtn.style.border = "none";
         acceptBtn.style.borderRadius = "4px";
@@ -202,10 +200,10 @@ export default function DonationRequestsMap({
         }}
       >
         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-          ⭐ <strong>Gold Marker</strong>: Closest Donor (You)
+          🔵 <strong>Blue Marker</strong>: Your Location
         </span>
         <span style={{ display: "inline-flex", alignItems: "center", gap: "0.3rem" }}>
-          🔴 <strong>Red Marker</strong>: Blood Request (Patient Location)
+          ⭐ <strong>Gold Marker</strong>: Nearest Blood Request
         </span>
       </div>
     </div>

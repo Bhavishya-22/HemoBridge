@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
+import { API_BASE } from "../config/api";
+import { attachProductionTileLayer } from "../config/mapConfig";
 
 // Crisp SVG pin icon to avoid bundler asset path issues
 const customPinIcon = L.divIcon({
@@ -46,11 +48,29 @@ export default function LocationPickerMap({
   const [locatingUser, setLocatingUser] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
 
-  // Reverse geocode lat, lng to city and state via Nominatim
+  // Reverse geocode lat, lng to city and state via backend proxy with fallback
   const reverseGeocode = async (lat, lng) => {
     setGeocoding(true);
     try {
-      const res = await fetch(
+      // 1. Production backend proxy (avoids CORS & 403 on deployed domains)
+      let res = await fetch(`${API_BASE}/geocode/reverse?lat=${lat}&lng=${lng}`).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json();
+        if (onLocationChange) {
+          onLocationChange({
+            lat,
+            lng,
+            city: data.city || "",
+            state: data.state || "",
+            displayName: data.displayName || "",
+          });
+        }
+        setStatusMsg(data.displayName ? `📍 ${data.displayName.slice(0, 55)}...` : "");
+        return;
+      }
+
+      // 2. Direct fallback
+      res = await fetch(
         `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
       );
       if (res.ok) {
@@ -101,15 +121,27 @@ export default function LocationPickerMap({
     }
   };
 
-  // Search places via Nominatim
+  // Search places via backend proxy with fallback
   const handleSearch = async (e) => {
-    e.preventDefault();
+    if (e && e.preventDefault) e.preventDefault();
     if (!searchQuery.trim()) return;
 
     setSearching(true);
     setSearchResults([]);
     try {
-      const res = await fetch(
+      // 1. Production backend proxy
+      let res = await fetch(
+        `${API_BASE}/geocode/search?q=${encodeURIComponent(searchQuery.trim())}`
+      ).catch(() => null);
+
+      if (res && res.ok) {
+        const data = await res.json();
+        setSearchResults(data.results || []);
+        return;
+      }
+
+      // 2. Direct fallback
+      res = await fetch(
         `https://nominatim.openstreetmap.org/search?format=jsonv2&q=${encodeURIComponent(
           searchQuery
         )}&limit=5`
@@ -152,20 +184,26 @@ export default function LocationPickerMap({
 
   // Initialize Leaflet Map
   useEffect(() => {
-    if (!mapContainerRef.current) return;
+    const container = mapContainerRef.current;
+    if (!container) return;
 
-    const map = L.map(mapContainerRef.current, {
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.stop();
+      mapInstanceRef.current.remove();
+      mapInstanceRef.current = null;
+    }
+    if (container._leaflet_id) {
+      delete container._leaflet_id;
+    }
+
+    const map = L.map(container, {
       center: [defaultLat, defaultLng],
       zoom: initialLat ? 14 : 12,
     });
     mapInstanceRef.current = map;
 
-    // OpenStreetMap tile layer
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      maxZoom: 19,
-    }).addTo(map);
+    // Attach production-ready CARTO Voyager tile layer with automatic fallback
+    attachProductionTileLayer(map);
 
     // Initial marker
     const marker = L.marker([defaultLat, defaultLng], {
@@ -187,13 +225,19 @@ export default function LocationPickerMap({
     });
 
     // Fix map sizing after mount
-    setTimeout(() => {
-      map.invalidateSize();
+    const resizeTimer = setTimeout(() => {
+      if (mapInstanceRef.current === map) {
+        map.invalidateSize();
+      }
     }, 250);
 
     return () => {
-      map.remove();
-      mapInstanceRef.current = null;
+      clearTimeout(resizeTimer);
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.stop();
+        mapInstanceRef.current.remove();
+        mapInstanceRef.current = null;
+      }
     };
   }, []);
 

@@ -48,6 +48,7 @@ app.get('/health', (req, res) => {
 });
 
 const adminRouter = require('./src/routes/adminRouter');
+const geocodeRouter = require('./src/routes/geocodeRouter');
 
 // routes
 app.use('/', userRouter);
@@ -57,6 +58,7 @@ app.use('/', hospitalRouter);
 app.use('/', notificationRouter);
 app.use('/', statsRouter);
 app.use('/', adminRouter);
+app.use('/', geocodeRouter);
 
 // 404 handler
 app.use((req, res) => {

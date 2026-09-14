@@ -29,21 +29,33 @@ export default function SignupPage() {
         const { latitude: lat, longitude: lng } = pos.coords;
         setLocation((prev) => ({ ...prev, lat, lng }));
         setGeoStatus("granted");
-        // Reverse-geocode with Nominatim (free, no key needed)
+        // Reverse-geocode via production backend proxy with graceful fallback
         try {
-          const res = await fetch(
+          let res = await fetch(`${API_BASE}/geocode/reverse?lat=${lat}&lng=${lng}`).catch(() => null);
+          if (res && res.ok) {
+            const data = await res.json();
+            if (data.city || data.state) {
+              setLocation((prev) => ({ ...prev, city: data.city || "", state: data.state || "" }));
+              return;
+            }
+          }
+
+          // Direct fallback
+          res = await fetch(
             `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
             { headers: { "Accept-Language": "en" } }
           );
-          const data = await res.json();
-          const city =
-            data.address?.city ||
-            data.address?.town ||
-            data.address?.village ||
-            data.address?.county ||
-            "";
-          const state = data.address?.state || "";
-          setLocation((prev) => ({ ...prev, city, state }));
+          if (res.ok) {
+            const data = await res.json();
+            const city =
+              data.address?.city ||
+              data.address?.town ||
+              data.address?.village ||
+              data.address?.county ||
+              "";
+            const state = data.address?.state || "";
+            setLocation((prev) => ({ ...prev, city, state }));
+          }
         } catch {
           /* geocode failed — user can type manually */
         }

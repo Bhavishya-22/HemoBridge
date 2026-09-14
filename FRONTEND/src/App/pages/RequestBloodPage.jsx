@@ -9,14 +9,27 @@ import "../styles/bloodFlow.css";
 
 function extractCoords(loc) {
   if (!loc) return null;
-  if (typeof loc.lat === "number" && typeof loc.lng === "number") return { lat: loc.lat, lng: loc.lng };
+  const lat1 = Number(loc.lat);
+  const lng1 = Number(loc.lng);
+  if (!isNaN(lat1) && !isNaN(lng1) && loc.lat != null && loc.lng != null) {
+    return { lat: lat1, lng: lng1 };
+  }
   if (loc.coordinates) {
-    if (typeof loc.coordinates.lat === "number" && typeof loc.coordinates.lng === "number")
-      return { lat: loc.coordinates.lat, lng: loc.coordinates.lng };
-    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2)
-      return { lat: loc.coordinates.coordinates[1], lng: loc.coordinates.coordinates[0] };
-    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2)
-      return { lat: loc.coordinates[1], lng: loc.coordinates[0] };
+    const lat2 = Number(loc.coordinates.lat);
+    const lng2 = Number(loc.coordinates.lng);
+    if (!isNaN(lat2) && !isNaN(lng2) && loc.coordinates.lat != null && loc.coordinates.lng != null) {
+      return { lat: lat2, lng: lng2 };
+    }
+    if (Array.isArray(loc.coordinates.coordinates) && loc.coordinates.coordinates.length >= 2) {
+      const lng3 = Number(loc.coordinates.coordinates[0]);
+      const lat3 = Number(loc.coordinates.coordinates[1]);
+      if (!isNaN(lat3) && !isNaN(lng3)) return { lat: lat3, lng: lng3 };
+    }
+    if (Array.isArray(loc.coordinates) && loc.coordinates.length >= 2) {
+      const lng4 = Number(loc.coordinates[0]);
+      const lat4 = Number(loc.coordinates[1]);
+      if (!isNaN(lat4) && !isNaN(lng4)) return { lat: lat4, lng: lng4 };
+    }
   }
   return null;
 }

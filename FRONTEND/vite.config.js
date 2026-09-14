@@ -15,6 +15,8 @@ const apiPrefixes = [
   'hospitals',
   'stats',
   'health',
+  'geocode',
+  'tiles',   // OSM tile proxy — serves map tiles through the backend
 ]
 
 // https://vite.dev/config/
