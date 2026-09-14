@@ -23,6 +23,7 @@ const CLIENT_ORIGINS = (process.env.CLIENT_ORIGIN || 'http://localhost:5173,http
 
 const rootDir = path.resolve();
 const app = express();
+app.set('trust proxy', 1);
 
 // middlewares
 app.use(

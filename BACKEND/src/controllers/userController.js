@@ -99,6 +99,15 @@ exports.userRegister = asyncHandler(async (req, res) => {
         });
 });
 
+const isProduction = process.env.NODE_ENV === "production";
+const getAuthCookieOptions = (maxAge) => ({
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    ...(maxAge ? { maxAge } : {}),
+    path: "/",
+});
+
 // Accepts either email OR username along with password.
 // Validates credentials, checks if user exists, compares password.
 // Issues new tokens and sets them in cookies.
@@ -145,18 +154,8 @@ const isExistingUser = await User.findOne({
     const { accessToken, refreshToken } = await generateAccessandRefreshTokens(isExistingUser._id);
 
     res
-        .cookie("accessToken", accessToken, {
-            httpOnly: true,
-            secure: false,
-            sameSite: "strict",
-            maxAge: 15 * 60 * 1000
-        })
-        .cookie("refreshToken", refreshToken, {
-            httpOnly: true,
-            secure: false,
-            sameSite: "strict",
-            maxAge: 24 * 60 * 60 * 1000
-        })
+        .cookie("accessToken", accessToken, getAuthCookieOptions(15 * 60 * 1000))
+        .cookie("refreshToken", refreshToken, getAuthCookieOptions(24 * 60 * 60 * 1000))
         .json({
             success: true,
             message: "Login successful",
@@ -199,18 +198,8 @@ exports.userLogout = asyncHandler(async (req, res) => {
     );
 
     res.status(200)
-        .clearCookie("accessToken", {
-            httpOnly: true,
-            secure: false,
-            sameSite: "strict",
-            path: '/'
-        })
-        .clearCookie("refreshToken", {
-            httpOnly: true,
-            secure: false,
-            sameSite: "strict",
-            path: '/'
-        })
+        .clearCookie("accessToken", getAuthCookieOptions())
+        .clearCookie("refreshToken", getAuthCookieOptions())
         .json({
             success: true,
             message: "Logout successful",
@@ -257,18 +246,8 @@ exports.refreshAccessToken = asyncHandler(async (req, res) => {
         const { accessToken, refreshToken: newRefreshToken } = await generateAccessandRefreshTokens(user._id);
 
         res
-            .cookie("accessToken", accessToken, { 
-                httpOnly: true, 
-                secure: false, 
-                sameSite: "strict",
-                maxAge: 15 * 60 * 1000
-            })
-            .cookie("refreshToken", newRefreshToken, { 
-                httpOnly: true, 
-                secure: false, 
-                sameSite: "strict",
-                maxAge: 24 * 60 * 60 * 1000
-            })
+            .cookie("accessToken", accessToken, getAuthCookieOptions(15 * 60 * 1000))
+            .cookie("refreshToken", newRefreshToken, getAuthCookieOptions(24 * 60 * 60 * 1000))
             .status(200)
             .json({ 
                 success: true,

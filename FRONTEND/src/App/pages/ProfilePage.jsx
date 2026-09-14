@@ -131,44 +131,6 @@ export default function ProfilePage() {
     return () => controller.abort();
   }, []);
 
-  const handleDetectLocation = () => {
-    if (!navigator.geolocation) {
-      setError("Geolocation is not supported by your browser.");
-      return;
-    }
-    setCoords((prev) => ({ ...prev, status: "acquiring" }));
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const lat = pos.coords.latitude;
-        const lng = pos.coords.longitude;
-        setCoords({ lat, lng, status: "granted" });
-
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1`
-          );
-          if (res.ok) {
-            const geo = await res.json();
-            const addr = geo.address || {};
-            const detectedCity = addr.city || addr.town || addr.village || addr.county || "";
-            const detectedState = addr.state || "";
-            setForm((prev) => ({
-              ...prev,
-              city: detectedCity || prev.city,
-              state: detectedState || prev.state,
-            }));
-          }
-        } catch {
-          // Keep coordinates even if reverse geocoding fails
-        }
-      },
-      (err) => {
-        console.warn("Detect location error:", err.message);
-        setCoords((prev) => ({ ...prev, status: "denied" }));
-      },
-      { timeout: 10000, enableHighAccuracy: true }
-    );
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -541,32 +503,10 @@ export default function ProfilePage() {
 
           {/* Location & Map Section (Available for all roles) */}
           <div style={{ marginTop: "1rem", marginBottom: "0.5rem" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+            <div style={{ marginBottom: "0.5rem" }}>
               <label className="field-label" style={{ margin: 0 }}>
                 Location (Map Pin & Coordinates) <span className="required">*</span>
               </label>
-              <button
-                type="button"
-                onClick={handleDetectLocation}
-                disabled={coords.status === "acquiring"}
-                style={{
-                  background: "#fef2f2",
-                  border: "1px solid #fecaca",
-                  borderRadius: "6px",
-                  padding: "0.35rem 0.75rem",
-                  fontSize: "0.82rem",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "0.35rem",
-                  color: "#b91c1c",
-                  fontWeight: 600,
-                  transition: "background 0.2s ease",
-                }}
-              >
-                <span>📍</span>
-                {coords.status === "acquiring" ? "Detecting location..." : "Detect My Location"}
-              </button>
             </div>
 
             <LocationPickerMap

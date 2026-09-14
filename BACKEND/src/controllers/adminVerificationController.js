@@ -187,7 +187,7 @@ exports.getPendingHospitals = asyncHandler(async (req, res) => {
     const hospitals = await User.find({
         role: "hospital",
         hospitalVerificationStatus: "pending",
-    }).select("fullName email hospitalName registrationNumber hospitalAddress hospitalPhone createdAt");
+    }).select("fullName email phoneNumber hospitalName registrationNumber hospitalAddress hospitalPhone location hospitalVerificationStatus createdAt");
 
     return res.status(200).json({
         success: true,

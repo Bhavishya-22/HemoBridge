@@ -195,6 +195,7 @@ export default function AdminDashboard() {
 
   // Modal State
   const [selectedRequest, setSelectedRequest] = useState(null);
+  const [selectedHospital, setSelectedHospital] = useState(null);
 
   useEffect(() => {
     if (user && user.role !== "admin") {
@@ -532,14 +533,26 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody>
                       {pendingHospitals.slice(0, 4).map((h) => (
-                        <tr key={h._id}>
+                        <tr
+                          key={h._id}
+                          className="clickable-row"
+                          onClick={() => setSelectedHospital(h)}
+                          title="Click to view hospital details"
+                        >
                           <td style={{ fontWeight: 600, color: "#fff" }}>
                             {h.hospitalName || h.fullName}
                           </td>
                           <td>{h.registrationNumber || "-"}</td>
                           <td>{h.email}</td>
                           <td>{h.createdAt ? new Date(h.createdAt).toLocaleDateString() : "-"}</td>
-                          <td className="dash-actions">
+                          <td className="dash-actions" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              type="button"
+                              className="dash-view-btn"
+                              onClick={() => setSelectedHospital(h)}
+                            >
+                              <EyeIcon /> Details
+                            </button>
                             <button
                               className="dash-btn approve"
                               onClick={() => handleVerifyHospital(h._id, "approve")}
@@ -695,15 +708,27 @@ export default function AdminDashboard() {
                   </thead>
                   <tbody>
                     {filteredHospitals.map((h) => (
-                      <tr key={h._id}>
+                      <tr
+                        key={h._id}
+                        className="clickable-row"
+                        onClick={() => setSelectedHospital(h)}
+                        title="Click to view hospital details"
+                      >
                         <td style={{ fontWeight: 600, color: "#fff" }}>
                           {h.hospitalName || h.fullName}
                         </td>
                         <td>{h.registrationNumber || "-"}</td>
                         <td>{h.email}</td>
-                        <td>{h.hospitalPhone || "-"}</td>
+                        <td>{h.hospitalPhone || h.phoneNumber || "-"}</td>
                         <td>{h.createdAt ? new Date(h.createdAt).toLocaleDateString() : "-"}</td>
-                        <td className="dash-actions">
+                        <td className="dash-actions" onClick={(e) => e.stopPropagation()}>
+                          <button
+                            type="button"
+                            className="dash-view-btn"
+                            onClick={() => setSelectedHospital(h)}
+                          >
+                            <EyeIcon /> Details
+                          </button>
                           <button
                             className="dash-btn approve"
                             onClick={() => handleVerifyHospital(h._id, "approve")}
@@ -1092,6 +1117,171 @@ export default function AdminDashboard() {
                 onClick={() => setSelectedRequest(null)}
               >
                 Close Summary
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================
+          MODAL: HOSPITAL VERIFICATION & DETAILS
+         ======================================================== */}
+      {selectedHospital && (
+        <div className="dash-modal-backdrop" onClick={() => setSelectedHospital(null)}>
+          <div className="dash-modal dash-modal-lg" onClick={(e) => e.stopPropagation()}>
+            {/* Modal Header */}
+            <div className="dash-modal-header">
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+                <ShieldIcon size={20} />
+                <h3 className="dash-modal-title">Hospital Verification Review</h3>
+                <span className="status-badge status-pending-hospital-approval">
+                  Pending Admin Audit
+                </span>
+              </div>
+              <button
+                type="button"
+                className="dash-modal-close"
+                onClick={() => setSelectedHospital(null)}
+                title="Close"
+              >
+                &times;
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="dash-modal-body">
+              {/* Accreditation & Audit Banner */}
+              <div className="privacy-badge-container">
+                <span className="privacy-badge-icon">
+                  <LockSecurityIcon />
+                </span>
+                <div>
+                  <div className="privacy-badge-title">Facility Accreditation & Clinical Audit</div>
+                  <p className="privacy-badge-desc">
+                    Verify hospital credentials, medical registration number, and operating contacts prior to approving this facility for donor management and blood testing.
+                  </p>
+                </div>
+              </div>
+
+              {/* Necessary Details Grid */}
+              <div className="detail-grid">
+                <div className="detail-item">
+                  <div className="detail-item-label">Hospital Name</div>
+                  <div className="detail-item-val" style={{ color: "#f87171" }}>
+                    {selectedHospital.hospitalName || selectedHospital.fullName}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Medical Registration / License #</div>
+                  <div className="detail-item-val">
+                    <span style={{ fontFamily: "monospace", letterSpacing: "0.5px" }}>
+                      {selectedHospital.registrationNumber || "Not Provided"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Authorized Contact Person</div>
+                  <div className="detail-item-val">
+                    {selectedHospital.fullName || "Hospital Admin"}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Official Email</div>
+                  <div className="detail-item-val" style={{ fontSize: "0.85rem", wordBreak: "break-all" }}>
+                    {selectedHospital.email}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Hospital Contact Phone</div>
+                  <div className="detail-item-val">
+                    {selectedHospital.hospitalPhone || selectedHospital.phoneNumber || "Not Provided"}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Authorized Rep. Mobile</div>
+                  <div className="detail-item-val">
+                    {selectedHospital.phoneNumber || selectedHospital.hospitalPhone || "Not Provided"}
+                  </div>
+                </div>
+
+                <div className="detail-item full" style={{ gridColumn: "1 / -1" }}>
+                  <div className="detail-item-label">Facility Physical Address</div>
+                  <div className="detail-item-val" style={{ fontWeight: 500, fontSize: "0.88rem" }}>
+                    {selectedHospital.hospitalAddress || "Not Provided"}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">City & State</div>
+                  <div className="detail-item-val">
+                    {selectedHospital.location?.city
+                      ? `${selectedHospital.location.city}${selectedHospital.location.state ? `, ${selectedHospital.location.state}` : ""}`
+                      : "Not specified"}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Map Coordinates</div>
+                  <div className="detail-item-val" style={{ fontSize: "0.82rem" }}>
+                    {selectedHospital.location?.coordinates?.coordinates &&
+                    Array.isArray(selectedHospital.location.coordinates.coordinates) &&
+                    selectedHospital.location.coordinates.coordinates.length === 2
+                      ? `Lat: ${selectedHospital.location.coordinates.coordinates[1]?.toFixed(4)}, Lng: ${selectedHospital.location.coordinates.coordinates[0]?.toFixed(4)}`
+                      : "No map coordinates saved"}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Registered Date</div>
+                  <div className="detail-item-val" style={{ fontSize: "0.82rem" }}>
+                    {selectedHospital.createdAt ? new Date(selectedHospital.createdAt).toLocaleString() : "-"}
+                  </div>
+                </div>
+
+                <div className="detail-item">
+                  <div className="detail-item-label">Verification Status</div>
+                  <div className="detail-item-val">
+                    <span className="status-badge status-pending-hospital-approval">
+                      Pending Audit
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="dash-modal-footer">
+              <button
+                type="button"
+                className="dash-btn secondary"
+                onClick={() => setSelectedHospital(null)}
+              >
+                Close
+              </button>
+              <button
+                type="button"
+                className="dash-btn reject"
+                onClick={() => {
+                  handleVerifyHospital(selectedHospital._id, "reject");
+                  setSelectedHospital(null);
+                }}
+              >
+                Reject Hospital
+              </button>
+              <button
+                type="button"
+                className="dash-btn approve"
+                onClick={() => {
+                  handleVerifyHospital(selectedHospital._id, "approve");
+                  setSelectedHospital(null);
+                }}
+              >
+                Approve & Verify Hospital
               </button>
             </div>
           </div>
