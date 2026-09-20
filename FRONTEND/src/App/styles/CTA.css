@@ -5,3 +5,11 @@
   .cta-title em { font-style: normal; color: var(--crimson); }
   .cta-sub { font-size: 1rem; color: var(--muted); margin-bottom: 2.25rem; }
   .cta-btns { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+
+  @media (max-width: 480px) {
+    .cta-section { padding: 3rem 1.25rem; }
+    .cta-title { font-size: 1.75rem; }
+    .cta-btns { flex-direction: column; width: 100%; }
+    .cta-btns button,
+    .cta-btns a { width: 100%; min-height: 46px; justify-content: center; text-align: center; }
+  }

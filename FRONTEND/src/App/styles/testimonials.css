@@ -13,3 +13,8 @@
   .testi-avatar { width: 38px; height: 38px; border-radius: 50%; background: var(--rose-light); color: var(--crimson); font-weight: 700; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; }
   .testi-name { font-weight: 600; font-size: 0.9rem; color: var(--slate); }
   .testi-role { font-size: 0.78rem; color: var(--muted); }
+
+  @media (max-width: 480px) {
+    .testi-grid { grid-template-columns: 1fr; gap: 1rem; }
+    .testi-card { padding: 1.25rem 1rem; }
+  }

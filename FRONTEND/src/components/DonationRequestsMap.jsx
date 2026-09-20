@@ -160,6 +160,15 @@ export default function DonationRequestsMap({
       map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14, animate: false });
     }
 
+    // Resize & orientation handler for mobile
+    const handleResize = () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
     // StrictMode-safe invalidateSize
     const resizeTimer = setTimeout(() => {
       if (mapInstanceRef.current === map) {
@@ -168,6 +177,8 @@ export default function DonationRequestsMap({
     }, 250);
 
     return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
       clearTimeout(resizeTimer);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.stop();

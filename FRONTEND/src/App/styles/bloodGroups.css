@@ -1,13 +1,68 @@
 /* ── BLOOD GROUPS ── */
-  .blood-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 1rem; }
-  .blood-card {
-    background: var(--white); border: 1.5px solid var(--border);
-    border-radius: var(--radius-lg); padding: 1.5rem 1rem; text-align: center;
-    transition: all 0.2s; cursor: default;
-    box-shadow: var(--shadow-sm);
+.blood-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 1rem;
+}
+
+.blood-card {
+  background: var(--white);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  transition: all 0.2s;
+  cursor: default;
+  box-shadow: var(--shadow-sm);
+}
+
+.blood-card:hover {
+  border-color: var(--rose);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-3px);
+}
+
+.blood-type {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--crimson);
+}
+
+.blood-count {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.blood-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #22c55e;
+  display: inline-block;
+  margin-right: 4px;
+}
+
+@media (max-width: 768px) {
+  .blood-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.75rem;
   }
-  .blood-card:hover { border-color: var(--rose); box-shadow: var(--shadow-md); transform: translateY(-3px); }
-  .blood-type { font-family: var(--font-display); font-size: 2rem; font-weight: 700; color: var(--crimson); }
-  .blood-count { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
-  .blood-dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; display: inline-block; margin-right: 4px; }
- 
+}
+
+@media (max-width: 480px) {
+  .blood-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.65rem;
+  }
+  .blood-card {
+    padding: 1rem 0.5rem;
+  }
+  .blood-type {
+    font-size: 1.6rem;
+  }
+  .blood-count {
+    font-size: 0.75rem;
+  }
+}

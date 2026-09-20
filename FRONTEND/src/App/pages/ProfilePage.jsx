@@ -37,6 +37,7 @@ export default function ProfilePage() {
   const [form, setForm] = useState(EMPTY_FORM);
   const [coords, setCoords] = useState({ lat: null, lng: null, status: "idle" });
   const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
 
@@ -135,6 +136,7 @@ export default function ProfilePage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
+    setSuccessMessage("");
 
     if (!form.fullName || !form.fullName.trim()) {
       setError("Please enter your full name.");
@@ -149,10 +151,17 @@ export default function ProfilePage() {
         setError("Please fill in all hospital details.");
         return;
       }
-    } else {
+    } else if (form.role === "donor") {
       const { phoneNumber, bloodGroup, age, weight, city, state } = form;
       if (!phoneNumber || !bloodGroup || !age || !weight || !city || !state) {
-        setError("Please fill in all required fields.");
+        setError("Please fill in all required donor fields (phone, blood group, age, weight, city, state).");
+        return;
+      }
+    } else {
+      // receiver
+      const { phoneNumber, bloodGroup, city, state } = form;
+      if (!phoneNumber || !bloodGroup || !city || !state) {
+        setError("Please fill in all required receiver fields (phone, blood group, city, state).");
         return;
       }
     }
@@ -172,22 +181,22 @@ export default function ProfilePage() {
         bodyPayload = {
           fullName: form.fullName.trim(),
           role: "hospital",
-          phoneNumber: form.phoneNumber,
-          hospitalName: form.hospitalName,
-          registrationNumber: form.registrationNumber,
-          hospitalAddress: form.hospitalAddress,
-          hospitalPhone: form.hospitalPhone,
+          phoneNumber: form.phoneNumber.trim(),
+          hospitalName: form.hospitalName.trim(),
+          registrationNumber: form.registrationNumber.trim(),
+          hospitalAddress: form.hospitalAddress.trim(),
+          hospitalPhone: form.hospitalPhone.trim(),
           location: locationPayload,
         };
       } else {
         bodyPayload = {
           fullName: form.fullName.trim(),
           role: form.role,
-          phoneNumber: form.phoneNumber,
+          phoneNumber: form.phoneNumber ? form.phoneNumber.trim() : undefined,
           bloodGroup: form.bloodGroup,
-          age: Number(form.age),
-          weight: Number(form.weight),
-          height: form.height ? Number(form.height) : undefined,
+          age: form.age !== "" && form.age != null ? Number(form.age) : undefined,
+          weight: form.weight !== "" && form.weight != null ? Number(form.weight) : undefined,
+          height: form.height !== "" && form.height != null ? Number(form.height) : undefined,
           location: locationPayload,
           diseases: form.diseases
             ? form.diseases.split(",").map((d) => d.trim()).filter(Boolean)
@@ -207,11 +216,16 @@ export default function ProfilePage() {
         setError(data.message || "Failed to save profile. Please try again.");
         return;
       }
+
+      setSuccessMessage(data.message || "Profile details saved successfully!");
       const updatedUser = normalizeUser(data.user);
       login(updatedUser);
       if (typeof updateUser === "function") updateUser(updatedUser);
       if (typeof refreshUser === "function") await refreshUser();
-      navigate(getRoleHomePath(updatedUser?.role));
+
+      setTimeout(() => {
+        navigate(getRoleHomePath(updatedUser?.role));
+      }, 1000);
     } catch {
       setError("Unable to connect to server. Please try again later.");
     } finally {
@@ -258,6 +272,21 @@ export default function ProfilePage() {
         {error && (
           <div className="profile-error" role="alert">
             {error}
+          </div>
+        )}
+
+        {successMessage && (
+          <div className="profile-success" role="status" style={{
+            background: "#f0fdf4",
+            border: "1px solid #bbf7d0",
+            color: "#166534",
+            padding: "0.85rem 1rem",
+            borderRadius: "8px",
+            marginBottom: "1.25rem",
+            fontWeight: "500",
+            fontSize: "0.9rem"
+          }}>
+            ✓ {successMessage}
           </div>
         )}
 
@@ -428,7 +457,7 @@ export default function ProfilePage() {
               <div className="form-row">
                 <div className="field-group">
                   <label htmlFor="age" className="field-label">
-                    Age <span className="required">*</span>
+                    Age {form.role === "donor" && <span className="required">*</span>}
                   </label>
                   <input
                     id="age"
@@ -438,15 +467,15 @@ export default function ProfilePage() {
                     placeholder="e.g. 22"
                     value={form.age}
                     onChange={handleChange}
-                    min={18}
-                    max={65}
-                    required
+                    min={form.role === "donor" ? 18 : 1}
+                    max={form.role === "donor" ? 65 : 120}
+                    required={form.role === "donor"}
                   />
                 </div>
 
                 <div className="field-group">
                   <label htmlFor="weight" className="field-label">
-                    Weight (kg) <span className="required">*</span>
+                    Weight (kg) {form.role === "donor" && <span className="required">*</span>}
                   </label>
                   <input
                     id="weight"
@@ -456,8 +485,8 @@ export default function ProfilePage() {
                     placeholder="e.g. 65"
                     value={form.weight}
                     onChange={handleChange}
-                    min={45}
-                    required
+                    min={form.role === "donor" ? 45 : 1}
+                    required={form.role === "donor"}
                   />
                 </div>
 

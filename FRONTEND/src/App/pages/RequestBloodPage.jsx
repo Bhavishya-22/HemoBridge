@@ -207,14 +207,19 @@ export default function RequestBloodPage() {
     e.preventDefault();
     setMessage({ type: "", text: "" });
 
-    if (!form.bloodGroup || !form.quantity || !form.city || !form.state) {
-      setMessage({ type: "error", text: "Blood group, quantity, city, and state are required." });
+    if (!form.bloodGroup || !form.quantity) {
+      setMessage({ type: "error", text: "Blood group and units needed are required." });
       return;
     }
 
     // Hospital requirement: must have EITHER a dropdown hospital OR manual hospital details
     if (!selectedHospital && !useManualHospital) {
-      setMessage({ type: "error", text: "Please select a hospital from the list or enter your hospital details manually." });
+      setMessage({
+        type: "error",
+        text: presenceMode === "at_hospital"
+          ? "Please select the hospital where you are admitted from the list (or enter it manually)."
+          : "Please select the hospital you contacted from the list (or enter it manually)."
+      });
       return;
     }
     if (useManualHospital && !manualHospital.name.trim()) {
@@ -226,16 +231,14 @@ export default function RequestBloodPage() {
       return;
     }
 
+    // Remote mode requirement: user must provide their own city and state
+    if (presenceMode === "remote" && (!form.city?.trim() || !form.state?.trim())) {
+      setMessage({ type: "error", text: "Your current city and state are required when not present at the hospital." });
+      return;
+    }
+
     setSubmitting(true);
     try {
-      const locationPayload = {
-        city: form.city,
-        state: form.state,
-        ...(coords.lat != null && coords.lng != null
-          ? { coordinates: { lat: coords.lat, lng: coords.lng } }
-          : {}),
-      };
-
       // ── Build hospital-related payload ──────────────────────────────────────
       let hospitalNameToSend = form.hospitalName;
       let preferredHospitalId = undefined;
@@ -263,6 +266,20 @@ export default function RequestBloodPage() {
           state: manualHospital.state,
           ...(manualHospital.lat != null && manualHospital.lng != null
             ? { coordinates: { lat: manualHospital.lat, lng: manualHospital.lng } }
+            : {}),
+        };
+      }
+
+      // If user is at the hospital, the request location is automatically taken from the hospital
+      let locationPayload;
+      if (presenceMode === "at_hospital") {
+        locationPayload = hospitalLocationPayload;
+      } else {
+        locationPayload = {
+          city: form.city,
+          state: form.state,
+          ...(coords.lat != null && coords.lng != null
+            ? { coordinates: { lat: coords.lat, lng: coords.lng } }
             : {}),
         };
       }
@@ -354,8 +371,8 @@ export default function RequestBloodPage() {
                 </div>
                 <p style={{ fontSize: "0.78rem", color: "#94a3b8", marginTop: "0.35rem", lineHeight: 1.5 }}>
                   {presenceMode === "at_hospital"
-                    ? "Your location will be used for both the request and hospital matching."
-                    : "Enter your current location below, then select the hospital you've contacted."}
+                    ? "Since you are in the hospital, its official address and coordinates will be automatically used for matching nearby donors."
+                    : "Enter your current location below, then select the hospital you contacted."}
                 </p>
               </div>
 
@@ -383,39 +400,55 @@ export default function RequestBloodPage() {
                 </select>
               </div>
 
-              {/* Patient location map — always visible (used for donor proximity) */}
-              <LocationPickerMap
-                initialLat={coords.lat}
-                initialLng={coords.lng}
-                onLocationChange={({ lat, lng, city, state }) => {
-                  setCoords({ lat, lng, status: "granted" });
-                  setForm((prev) => ({ ...prev, city: city || prev.city, state: state || prev.state }));
-                }}
-                label={presenceMode === "at_hospital" ? "Your Location (Map)" : "Your Current Location (Map)"}
-                height="240px"
-              />
+              {/* Patient location inputs — only shown when NOT present at the hospital (remote mode) */}
+              {presenceMode === "remote" && (
+                <div style={{ padding: "0.75rem", background: "#f8fafc", borderRadius: 10, border: "1px solid #e2e8f0", marginBottom: "0.75rem" }}>
+                  <div style={{ fontSize: "0.82rem", fontWeight: 700, color: "#334155", marginBottom: "0.25rem" }}>
+                    📍 Your Current Location (Remote)
+                  </div>
+                  <p style={{ fontSize: "0.76rem", color: "#64748b", marginBottom: "0.5rem", lineHeight: 1.4 }}>
+                    Since you are not currently at the hospital, provide your current location for contact reference.
+                  </p>
 
-              <div className="flow-row">
-                <div className="flow-field">
-                  <label htmlFor="city">{presenceMode === "at_hospital" ? "City" : "Your city"}</label>
-                  <input id="city" name="city" value={form.city} onChange={handleChange} required placeholder="e.g. Hyderabad" />
-                </div>
-                <div className="flow-field">
-                  <label htmlFor="state">{presenceMode === "at_hospital" ? "State" : "Your state"}</label>
-                  <input id="state" name="state" value={form.state} onChange={handleChange} required placeholder="e.g. Telangana" />
-                </div>
-              </div>
+                  <LocationPickerMap
+                    initialLat={coords.lat}
+                    initialLng={coords.lng}
+                    onLocationChange={({ lat, lng, city, state }) => {
+                      setCoords({ lat, lng, status: "granted" });
+                      setForm((prev) => ({ ...prev, city: city || prev.city, state: state || prev.state }));
+                    }}
+                    label="Your Current Location (Map)"
+                    height="200px"
+                  />
 
-              {geoStatusMsg && (
-                <p className="flow-geo-status">{geoStatusMsg}</p>
+                  <div className="flow-row" style={{ marginTop: "0.5rem" }}>
+                    <div className="flow-field">
+                      <label htmlFor="city">Your city</label>
+                      <input id="city" name="city" value={form.city} onChange={handleChange} required placeholder="e.g. Hyderabad" />
+                    </div>
+                    <div className="flow-field">
+                      <label htmlFor="state">Your state</label>
+                      <input id="state" name="state" value={form.state} onChange={handleChange} required placeholder="e.g. Telangana" />
+                    </div>
+                  </div>
+
+                  {geoStatusMsg && (
+                    <p className="flow-geo-status">{geoStatusMsg}</p>
+                  )}
+                </div>
               )}
 
-              {/* ── Hospital picker (remote mode only) ── */}
+              {/* ── Hospital picker ── */}
                 <div className="flow-hospital-picker">
                   <div className="flow-hospital-picker-label">
-                    🏥 {presenceMode === "at_hospital" ? "Hospital you are admitted in" : "Hospital you contacted"}
+                    🏥 {presenceMode === "at_hospital" ? "Hospital where you are admitted" : "Hospital you contacted"}
                     <span style={{ fontWeight: 400, color: "#b91c1c", fontSize: "0.75rem" }}> (required)</span>
                   </div>
+                  <p style={{ fontSize: "0.78rem", color: "#64748b", margin: "0.2rem 0 0.5rem 0", lineHeight: 1.4 }}>
+                    {presenceMode === "at_hospital"
+                      ? "Donors will be matched and alerted within proximity of this hospital's address."
+                      : "The request will be routed to this hospital for verification."}
+                  </p>
 
                   {/* Dropdown — hidden when manual mode is active */}
                   {!useManualHospital && (
@@ -526,6 +559,58 @@ export default function RequestBloodPage() {
                           placeholder="e.g. Apollo Hospitals"
                           required={useManualHospital}
                         />
+
+                        {/* Instant suggestions from verified hospitals database */}
+                        {useManualHospital && manualHospital.name?.trim()?.length >= 2 && (() => {
+                          const matches = hospitals.filter((h) =>
+                            (h.hospitalName || h.fullName || "")
+                              .toLowerCase()
+                              .includes(manualHospital.name.trim().toLowerCase())
+                          );
+                          if (matches.length === 0) return null;
+                          return (
+                            <div style={{ background: "#f0fdf4", border: "1px solid #bbf7d0", borderRadius: "8px", padding: "0.5rem 0.75rem", fontSize: "0.78rem", marginTop: "0.4rem" }}>
+                              <div style={{ color: "#166534", fontWeight: 700, marginBottom: "0.3rem" }}>
+                                🏥 Verified hospital match found in system:
+                              </div>
+                              {matches.slice(0, 3).map((h) => (
+                                <button
+                                  key={h._id}
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedHospital(h);
+                                    setUseManualHospital(false);
+                                    setManualHospital({ name: "", city: "", state: "" });
+                                  }}
+                                  style={{
+                                    display: "flex",
+                                    justifyContent: "space-between",
+                                    alignItems: "center",
+                                    width: "100%",
+                                    textAlign: "left",
+                                    background: "#ffffff",
+                                    border: "1px solid #86efac",
+                                    borderRadius: "6px",
+                                    padding: "0.45rem 0.65rem",
+                                    margin: "0.25rem 0",
+                                    cursor: "pointer",
+                                    fontSize: "0.78rem",
+                                    color: "#1e293b",
+                                  }}
+                                >
+                                  <span>
+                                    <strong>{h.hospitalName || h.fullName}</strong>
+                                    {h.hospitalAddress ? ` · ${h.hospitalAddress}` : ""}
+                                    {h.location?.city ? ` · ${h.location.city}` : ""}
+                                  </span>
+                                  <span style={{ color: "#059669", fontWeight: 700, marginLeft: "0.5rem", whiteSpace: "nowrap" }}>
+                                    ✓ Use verified details
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* Hospital address / street */}

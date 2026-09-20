@@ -108,4 +108,16 @@ notificationSchema.index({ recipientId: 1, createdAt: -1 });
 notificationSchema.index({ recipientId: 1, status: 1 });
 notificationSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
+// Automatically convert system notifications to direct emails sent to the user's Google/registered mail
+notificationSchema.post("save", function (doc) {
+  setImmediate(async () => {
+    try {
+      const { dispatchNotificationEmail } = require("../services/notificationEmailService");
+      await dispatchNotificationEmail(doc);
+    } catch (err) {
+      console.warn("Could not dispatch notification email:", err.message);
+    }
+  });
+});
+
 module.exports = mongoose.model("Notification", notificationSchema);

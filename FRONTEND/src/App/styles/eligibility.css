@@ -7,3 +7,9 @@
   .elig-visual { background: var(--white); border-radius: var(--radius-xl); padding: 2.5rem; border: 1.5px solid var(--border); text-align: center; }
   .elig-big-num { font-family: var(--font-display); font-size: 5rem; font-weight: 700; color: var(--crimson); line-height: 1; }
   .elig-big-label { font-size: 0.9rem; color: var(--muted); margin-top: 0.5rem; }
+
+  @media (max-width: 768px) {
+    .elig-layout { grid-template-columns: 1fr; gap: 2rem; }
+    .elig-visual { padding: 1.75rem 1.25rem; }
+    .elig-big-num { font-size: 4rem; }
+  }

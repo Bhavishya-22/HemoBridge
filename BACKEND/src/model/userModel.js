@@ -177,7 +177,7 @@ const userSchema = new mongoose.Schema(
 
     isVerified: {
       type: Boolean,
-      default: true,
+      default: false,
     },
 
     isBlocked: {
@@ -188,6 +188,17 @@ const userSchema = new mongoose.Schema(
     refreshToken: {
       type: String,
       select: false, // never exposed in queries
+    },
+
+    // ─── Registration OTP ────────────────────────────────────────
+    registrationOTP: {
+      type: String,
+      select: false,
+    },
+
+    registrationOTPExpiry: {
+      type: Date,
+      select: false,
     },
 
     // ─── Password Reset OTP ─────────────────────────────────────

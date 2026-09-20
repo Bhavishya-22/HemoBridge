@@ -5,6 +5,8 @@ const authMiddleware = require('../middlewares/authMiddleware');
 
 // Authentication routes
 userRouter.post('/auth/register', userController.userRegister);  
+userRouter.post('/auth/verify-registration-otp', userController.verifyRegistrationOTP);
+userRouter.post('/auth/resend-registration-otp', userController.resendRegistrationOTP);
 userRouter.post('/auth/login', userController.userLogin);
 userRouter.post('/auth/google', userController.googleLogin);
 userRouter.get('/auth/google-client-id', userController.getGoogleClientId);

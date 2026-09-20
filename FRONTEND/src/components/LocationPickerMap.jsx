@@ -224,7 +224,15 @@ export default function LocationPickerMap({
       setPosition(lat, lng, true);
     });
 
-    // Fix map sizing after mount
+    // Fix map sizing after mount and on viewport/orientation change
+    const handleResize = () => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.invalidateSize();
+      }
+    };
+    window.addEventListener("resize", handleResize);
+    window.addEventListener("orientationchange", handleResize);
+
     const resizeTimer = setTimeout(() => {
       if (mapInstanceRef.current === map) {
         map.invalidateSize();
@@ -232,6 +240,8 @@ export default function LocationPickerMap({
     }, 250);
 
     return () => {
+      window.removeEventListener("resize", handleResize);
+      window.removeEventListener("orientationchange", handleResize);
       clearTimeout(resizeTimer);
       if (mapInstanceRef.current) {
         mapInstanceRef.current.stop();

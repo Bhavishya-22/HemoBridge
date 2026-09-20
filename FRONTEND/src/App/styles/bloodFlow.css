@@ -450,8 +450,59 @@ button[type="submit"].flow-btn {
 @media (max-width: 600px) {
   .flow-card { padding: 1.25rem; border-radius: 14px; }
   .flow-header { padding: 1.5rem 1rem 0; }
+  .flow-title { font-size: 1.5rem; }
   .flow-content { padding: 0 1rem; }
+  .flow-alert { width: calc(100% - 2rem); margin: 1rem auto 0; padding: 0.75rem 1rem; }
   .flow-request-item { padding: 0.9rem 1rem; }
+  .flow-field input,
+  .flow-field select,
+  .flow-field textarea,
+  .flow-hospital-picker select {
+    font-size: 16px !important; /* Prevents iOS auto-zoom */
+    min-height: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .flow-mode-toggle {
+    flex-direction: column;
+    gap: 0.45rem;
+  }
+  .flow-mode-btn {
+    width: 100%;
+    padding: 0.75rem 0.6rem;
+  }
+  .flow-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+  .flow-actions .flow-btn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+  .flow-modal {
+    max-height: 94vh;
+    border-radius: 16px;
+    margin: 0.5rem;
+  }
+  .flow-modal-header {
+    padding: 1rem 1.15rem;
+  }
+  .flow-modal-body {
+    padding: 1.15rem;
+  }
+  .flow-detail-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.25rem;
+  }
+  .flow-detail-value {
+    text-align: left;
+  }
+  .flow-modal-footer {
+    padding: 0.85rem 1.15rem;
+  }
 }
 
 /* ═══════════════════════════════════════════════════

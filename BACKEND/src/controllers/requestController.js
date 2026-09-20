@@ -131,6 +131,43 @@ exports.createRequest = asyncHandler(async (req, res) => {
     }
   }
 
+  // When user is at the hospital, request location inherits the hospital's exact location & address
+  let effectiveLocation = location;
+  if (mode === "at_hospital") {
+    if (resolvedHospitalLocation && (resolvedHospitalLocation.city || resolvedHospitalLocation.address)) {
+      effectiveLocation = {
+        address: resolvedHospitalLocation.address || location?.address || "",
+        city: resolvedHospitalLocation.city || location?.city || "",
+        state: resolvedHospitalLocation.state || location?.state || "",
+        coordinates: resolvedHospitalLocation.coordinates || location?.coordinates,
+      };
+    } else if (hospitalLocation) {
+      effectiveLocation = {
+        address: hospitalLocation.address || location?.address || "",
+        city: hospitalLocation.city || location?.city || "",
+        state: hospitalLocation.state || location?.state || "",
+        coordinates: hospitalLocation.coordinates || location?.coordinates,
+      };
+    }
+  }
+
+  // Validate location based on presence mode
+  if (mode === "at_hospital") {
+    if (!effectiveLocation?.city || !effectiveLocation?.state) {
+      return res.status(400).json({
+        success: false,
+        message: "Hospital location (city and state) is required when present at the hospital.",
+      });
+    }
+  } else {
+    if (!location?.city || !location?.state) {
+      return res.status(400).json({
+        success: false,
+        message: "Your current location (city and state) is required.",
+      });
+    }
+  }
+
   // location.coordinates.{lat, lng} is stored as-received; parseCoordinates() in the
   // donor selection service handles both flat {lat,lng} and GeoJSON formats for geo queries.
   const request = await BloodRequest.create({
@@ -138,7 +175,7 @@ exports.createRequest = asyncHandler(async (req, res) => {
     bloodGroup: bloodGroup.toUpperCase(),
     quantity,
     emergencyLevel: emergencyLevel || "medium",
-    location,
+    location: effectiveLocation,
     hospitalName,
     description,
     presenceMode: mode,
@@ -158,10 +195,10 @@ exports.createRequest = asyncHandler(async (req, res) => {
       bloodGroup: request.bloodGroup,
       quantity: request.quantity,
       emergencyLevel: request.emergencyLevel,
-      hasCoordinates: !!(location?.coordinates?.lat && location?.coordinates?.lng),
+      hasCoordinates: !!(effectiveLocation?.coordinates?.lat && effectiveLocation?.coordinates?.lng),
       presenceMode: mode,
       preferredHospital: resolvedHospitalId,
-      location,
+      location: effectiveLocation,
     },
     note: "Receiver submitted new blood request awaiting hospital verification",
   });

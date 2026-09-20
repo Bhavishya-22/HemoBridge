@@ -44,6 +44,17 @@ export default function LoginPage() {
         return;
       }
 
+      if (data.requireOtp) {
+        navigate("/signup", {
+          state: {
+            email: data.email,
+            role: data.role,
+            requireOtp: true,
+          },
+        });
+        return;
+      }
+
       handleAuthSuccess(data.user);
     } catch {
       setError("Unable to connect to server. Please try again later.");

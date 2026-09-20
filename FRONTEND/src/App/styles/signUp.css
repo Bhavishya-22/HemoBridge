@@ -218,6 +218,35 @@ body {
   .auth-card { padding: 2.5rem 1.75rem; }
 }
 
+@media (max-width: 480px) {
+  .auth-page {
+    margin-top: 62px;
+  }
+  .auth-card {
+    padding: 1.5rem 1rem;
+  }
+  .auth-title {
+    font-size: 1.5rem;
+  }
+  .field-input, select.field-input {
+    font-size: 16px !important; /* Prevents iOS Safari auto-zoom on focus */
+    height: 46px;
+  }
+  .auth-btn {
+    height: 48px;
+    font-size: 1rem;
+  }
+  .signup-detect-btn {
+    min-height: 44px;
+  }
+  .auth-link, .auth-footer-text, .field-label {
+    min-height: 24px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+
 /* ── DETECT LOCATION BUTTON ── */
 .signup-detect-btn {
   display: inline-flex;
@@ -279,8 +308,10 @@ body {
 
 .google-gis-target {
   width: 100%;
+  max-width: 100%;
   display: flex;
   justify-content: center;
+  overflow: hidden;
 }
 
 .google-gis-target:empty {
@@ -293,6 +324,7 @@ body {
   justify-content: center;
   gap: 0.75rem;
   width: 100%;
+  min-height: 44px;
   padding: 0.75rem 1.25rem;
   background: #ffffff;
   border: 1.5px solid var(--border, #e2e8f0);
@@ -514,4 +546,123 @@ body {
 .google-modal-close-btn:hover {
   background: #e2e8f0;
   color: #1e293b;
+}
+
+/* ── OTP VERIFICATION STEP ── */
+.otp-verification-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.otp-badge {
+  display: inline-block;
+  background: #fee2e2;
+  color: var(--crimson);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  margin-bottom: 0.6rem;
+}
+
+.otp-digit-input {
+  height: 52px;
+  font-size: 1.5rem !important;
+  font-weight: 700;
+  text-align: center;
+  letter-spacing: 8px;
+  color: var(--slate);
+}
+
+.otp-resend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.otp-resend-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--crimson);
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  transition: opacity 0.2s;
+}
+
+.otp-resend-btn:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.otp-back-btn {
+  background: transparent;
+  border: none;
+  font-size: 0.82rem;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.35rem 0.5rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.otp-back-btn:hover {
+  color: var(--slate);
+}
+
+/* ── INFO MESSAGE ── */
+.auth-info {
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius-sm);
+  color: #166534;
+  font-size: 0.875rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  line-height: 1.4;
+}
+
+/* ── THANKS FOR REGISTERING CELEBRATION ── */
+.registration-success-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 1.5rem 0;
+}
+
+.success-icon-celebration {
+  font-size: 3.5rem;
+  margin-bottom: 1rem;
+  animation: bounceCelebration 1.2s ease infinite alternate;
+}
+
+@keyframes bounceCelebration {
+  0% { transform: translateY(0) scale(1); }
+  100% { transform: translateY(-8px) scale(1.08); }
+}
+
+.success-callout-box {
+  background: #fff5f5;
+  border: 1.5px solid #fecaca;
+  border-radius: var(--radius-md);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.75rem;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.success-callout-box p {
+  color: #991b1b;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0;
 }
