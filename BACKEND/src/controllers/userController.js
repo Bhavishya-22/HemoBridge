@@ -1,6 +1,7 @@
 //userController.js
 const asyncHandler = require('express-async-handler');
 const bcrypt = require('bcryptjs'); 
+const crypto = require('crypto');
 const User = require('../model/userModel');
 const jwt = require("jsonwebtoken");
 
@@ -437,5 +438,296 @@ exports.getHospitalRegistrationStatus = asyncHandler(async (req, res) => {
         hospitalVerified: user.hospitalVerified,
         hospitalVerificationNotes: user.hospitalVerificationNotes,
         message: user.hospitalVerified ? "Hospital is verified" : "Hospital is not verified yet"
+    });
+});
+
+// ─── Google OAuth Login/Signup ──────────────────────────────────────────────
+// Receives the Google credential (ID token) from the frontend.
+// Verifies it using Google's tokeninfo endpoint (no library needed).
+// Finds existing user by googleId or email; creates one if first-time.
+// Issues access + refresh tokens via cookies.
+exports.googleLogin = asyncHandler(async (req, res) => {
+    const { credential, isDemo } = req.body;
+
+    if (!credential && !isDemo) {
+        return res.status(400).json({
+            success: false,
+            message: "Google credential is required"
+        });
+    }
+
+    // Verify the ID token with Google (or handle demo mode for dev/preview)
+    let googleUser;
+    if (isDemo || credential === "demo-google-credential") {
+        googleUser = {
+            sub: "demo_google_user_998877",
+            email: "google.donor@bloodbank.org",
+            name: "Google Demo Donor",
+            picture: ""
+        };
+    } else {
+        try {
+            const response = await fetch(
+                `https://oauth2.googleapis.com/tokeninfo?id_token=${credential}`
+            );
+            if (!response.ok) {
+                throw new Error("Invalid Google token");
+            }
+            googleUser = await response.json();
+        } catch {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid Google credential"
+            });
+        }
+
+        // Validate audience matches our client ID if configured
+        if (process.env.GOOGLE_CLIENT_ID && !process.env.GOOGLE_CLIENT_ID.startsWith("YOUR_")) {
+            if (googleUser.aud !== process.env.GOOGLE_CLIENT_ID) {
+                return res.status(401).json({
+                    success: false,
+                    message: "Google token was not issued for this application"
+                });
+            }
+        }
+    }
+
+    const { sub: googleId, email, name, picture } = googleUser;
+
+    // Try to find existing user by googleId first, then by email
+    let user = await User.findOne({ googleId });
+
+    if (!user) {
+        // Check if a local account exists with the same email
+        user = await User.findOne({ email: email.toLowerCase() });
+
+        if (user) {
+            // Link Google ID to existing local account
+            user.googleId = googleId;
+            user.authProvider = user.authProvider === 'local' ? 'local' : 'google';
+            await user.save({ validateBeforeSave: false });
+        } else {
+            // Create a new account for this Google user
+            const baseUsername = email.split('@')[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+            let username = baseUsername;
+            let counter = 1;
+            while (await User.findOne({ username })) {
+                username = `${baseUsername}${counter++}`;
+            }
+
+            user = await User.create({
+                fullName: name || email.split('@')[0],
+                username,
+                email: email.toLowerCase(),
+                googleId,
+                authProvider: 'google',
+                isVerified: true,
+                role: 'donor',
+            });
+        }
+    }
+
+    if (user.isBlocked) {
+        return res.status(403).json({
+            success: false,
+            message: "Your account has been blocked"
+        });
+    }
+
+    const { accessToken, refreshToken } = await generateAccessandRefreshTokens(user._id);
+
+    res
+        .cookie("accessToken", accessToken, getAuthCookieOptions(15 * 60 * 1000))
+        .cookie("refreshToken", refreshToken, getAuthCookieOptions(24 * 60 * 60 * 1000))
+        .json({
+            success: true,
+            message: "Google login successful",
+            user: {
+                id: user._id,
+                username: user.username,
+                email: user.email,
+                fullName: user.fullName,
+                role: user.role,
+                location: user.location,
+                bloodGroup: user.bloodGroup,
+                profileCompleted: user.profileCompleted,
+                hospitalVerified: user.hospitalVerified
+            }
+        });
+});
+
+// Returns the public Google Client ID if configured in BACKEND/.env
+exports.getGoogleClientId = asyncHandler(async (req, res) => {
+    const clientId = process.env.GOOGLE_CLIENT_ID || "";
+    const isConfigured = clientId && !clientId.startsWith("YOUR_") && clientId.trim().length > 10;
+    res.json({
+        success: true,
+        clientId: isConfigured ? clientId.trim() : null
+    });
+});
+
+// ─── Forgot Password ────────────────────────────────────────────────────────
+// Accepts an email, generates a 6-digit OTP, hashes it and stores with 10-min expiry.
+// Sends the plain OTP to the user's email via Nodemailer (Gmail SMTP).
+exports.forgotPassword = asyncHandler(async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) {
+        return res.status(400).json({
+            success: false,
+            message: "Email is required"
+        });
+    }
+
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+
+    if (!user) {
+        // Don't reveal whether email exists — always return success
+        return res.status(200).json({
+            success: true,
+            message: "If an account with that email exists, an OTP has been sent."
+        });
+    }
+
+    // Google-only accounts cannot reset password
+    if (user.authProvider === 'google' && !user.password) {
+        return res.status(400).json({
+            success: false,
+            message: "This account uses Google sign-in. Please log in with Google."
+        });
+    }
+
+    // Generate a 6-digit OTP
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const hashedOTP = await bcrypt.hash(otp, 10);
+
+    // Store hashed OTP with 10-minute expiry
+    user.resetOTP = hashedOTP;
+    user.resetOTPExpiry = new Date(Date.now() + 10 * 60 * 1000);
+    await user.save({ validateBeforeSave: false });
+
+    // Send OTP via email (or log to terminal in development if email not configured)
+    let nodemailerModule = null;
+    try {
+        nodemailerModule = require('nodemailer');
+    } catch {
+        // nodemailer not installed locally yet
+    }
+
+    const hasSmtpCredentials =
+        process.env.SMTP_EMAIL &&
+        !process.env.SMTP_EMAIL.includes('YOUR_GMAIL') &&
+        process.env.SMTP_PASSWORD &&
+        !process.env.SMTP_PASSWORD.includes('YOUR_GMAIL');
+
+    if (!nodemailerModule || !hasSmtpCredentials) {
+        console.log(`\n======================================================`);
+        console.log(`🔑 PASSWORD RESET OTP for ${user.email}: [ ${otp} ]`);
+        console.log(`   (Valid for 10 minutes | Dev fallback active)`);
+        console.log(`======================================================\n`);
+        return res.status(200).json({
+            success: true,
+            message: "If an account with that email exists, an OTP has been sent."
+        });
+    }
+
+    try {
+        const transporter = nodemailerModule.createTransport({
+            service: 'gmail',
+            auth: {
+                user: process.env.SMTP_EMAIL,
+                pass: process.env.SMTP_PASSWORD,
+            },
+        });
+
+        await transporter.sendMail({
+            from: `"BloodBank" <${process.env.SMTP_EMAIL}>`,
+            to: user.email,
+            subject: 'Password Reset OTP — BloodBank',
+            html: `
+                <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
+                    <h2 style="color: #b91c1c; margin: 0 0 8px;">🩸 BloodBank</h2>
+                    <p style="color: #1e293b; font-size: 15px; margin: 0 0 24px;">We received a request to reset your password. Use the OTP below:</p>
+                    <div style="background: #b91c1c; color: #fff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 16px; border-radius: 12px; margin: 0 0 24px;">
+                        ${otp}
+                    </div>
+                    <p style="color: #64748b; font-size: 13px; margin: 0;">This OTP expires in <strong>10 minutes</strong>. If you didn't request this, please ignore this email.</p>
+                </div>
+            `,
+        });
+    } catch (emailErr) {
+        console.error("Failed to send OTP email:", emailErr.message);
+        return res.status(500).json({
+            success: false,
+            message: "Failed to send OTP email. Please try again later."
+        });
+    }
+
+    res.status(200).json({
+        success: true,
+        message: "If an account with that email exists, an OTP has been sent."
+    });
+});
+
+// ─── Reset Password ─────────────────────────────────────────────────────────
+// Accepts email + OTP + new password. Verifies OTP against stored hash.
+// If valid and not expired, hashes and sets the new password.
+exports.resetPassword = asyncHandler(async (req, res) => {
+    const { email, otp, newPassword } = req.body;
+
+    if (!email || !otp || !newPassword) {
+        return res.status(400).json({
+            success: false,
+            message: "Email, OTP, and new password are required"
+        });
+    }
+
+    if (newPassword.length < 8) {
+        return res.status(400).json({
+            success: false,
+            message: "Password must be at least 8 characters"
+        });
+    }
+
+    const user = await User.findOne({
+        email: email.toLowerCase().trim()
+    }).select("+resetOTP +resetOTPExpiry");
+
+    if (!user || !user.resetOTP || !user.resetOTPExpiry) {
+        return res.status(400).json({
+            success: false,
+            message: "Invalid or expired OTP"
+        });
+    }
+
+    // Check expiry
+    if (user.resetOTPExpiry < new Date()) {
+        user.resetOTP = undefined;
+        user.resetOTPExpiry = undefined;
+        await user.save({ validateBeforeSave: false });
+        return res.status(400).json({
+            success: false,
+            message: "OTP has expired. Please request a new one."
+        });
+    }
+
+    // Verify OTP
+    const isValidOTP = await bcrypt.compare(otp, user.resetOTP);
+    if (!isValidOTP) {
+        return res.status(400).json({
+            success: false,
+            message: "Invalid OTP"
+        });
+    }
+
+    // Set new password and clear OTP fields
+    user.password = newPassword;
+    user.resetOTP = undefined;
+    user.resetOTPExpiry = undefined;
+    await user.save();
+
+    res.status(200).json({
+        success: true,
+        message: "Password reset successfully. You can now log in with your new password."
     });
 });

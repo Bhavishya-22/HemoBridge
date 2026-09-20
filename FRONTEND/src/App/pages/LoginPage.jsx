@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getRoleHomePath, normalizeUser } from "../../utils/roleAccess";
+import GoogleAuthButton from "../components/GoogleAuthButton";
 import "../styles/login.css";
 
 import { API_BASE } from "../../config/api";
@@ -43,17 +44,21 @@ export default function LoginPage() {
         return;
       }
 
-      login(normalizeUser(data.user));
-      const role = data.user.role;
-      if (role === "admin" || role === "hospital") {
-        navigate(getRoleHomePath(role));
-      } else {
-        navigate(data.user.profileCompleted ? getRoleHomePath(role) : "/profile");
-      }
+      handleAuthSuccess(data.user);
     } catch {
       setError("Unable to connect to server. Please try again later.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAuthSuccess = (userData) => {
+    login(normalizeUser(userData));
+    const role = userData.role;
+    if (role === "admin" || role === "hospital") {
+      navigate(getRoleHomePath(role));
+    } else {
+      navigate(userData.profileCompleted ? getRoleHomePath(role) : "/profile");
     }
   };
 
@@ -82,6 +87,19 @@ export default function LoginPage() {
             {error}
           </div>
         )}
+
+        {/* ── Professional Google Sign-In Button (Always Visible) ── */}
+        <GoogleAuthButton
+          text="Continue with Google"
+          containerId="google-signin-btn-login"
+          onSuccess={handleAuthSuccess}
+          onError={(msg) => setError(msg)}
+        />
+
+        {/* ── Divider ── */}
+        <div className="auth-divider">
+          <span>or continue with credentials</span>
+        </div>
 
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           <div className="field-group">

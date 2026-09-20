@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getRoleHomePath, normalizeUser } from "../../utils/roleAccess";
 import { API_BASE } from "../../config/api";
-import "../styles/signup.css";
+import GoogleAuthButton from "../components/GoogleAuthButton";
+import "../styles/signUp.css";
 
 export default function SignupPage() {
   const [form, setForm] = useState({ fullName: "", username: "", email: "", password: "" });
@@ -96,13 +97,22 @@ export default function SignupPage() {
       if (!res.ok) {
         setError(data.message || "Registration failed. Please try again.");
       } else {
-        login(normalizeUser(data.user));
-        navigate(data.user.profileCompleted ? getRoleHomePath(data.user.role) : "/profile");
+        handleAuthSuccess(data.user);
       }
     } catch {
       setError("Unable to connect to server. Please try again later.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleAuthSuccess = (userData) => {
+    login(normalizeUser(userData));
+    const role = userData.role;
+    if (role === "admin" || role === "hospital") {
+      navigate(getRoleHomePath(role));
+    } else {
+      navigate(userData.profileCompleted ? getRoleHomePath(role) : "/profile");
     }
   };
 
@@ -122,6 +132,18 @@ export default function SignupPage() {
         </div>
 
         {error && <div className="auth-error">{error}</div>}
+
+        {/* ── Professional Google Sign-Up Button (Always Visible) ── */}
+        <GoogleAuthButton
+          text="Sign up with Google"
+          containerId="google-signin-btn-signup"
+          onSuccess={handleAuthSuccess}
+          onError={(msg) => setError(msg)}
+        />
+
+        <div className="auth-divider">
+          <span>or register with email</span>
+        </div>
 
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
           <div className="field-group">
@@ -258,7 +280,7 @@ export default function SignupPage() {
 
         <p className="auth-footer-text">
           Already have an account?{" "}
-          <a href="/login" className="auth-link">Log in</a>
+          <Link to="/login" className="auth-link">Log in</Link>
         </p>
       </div>
 
@@ -273,4 +295,4 @@ export default function SignupPage() {
       </div>
     </div>
   );
-}
+}

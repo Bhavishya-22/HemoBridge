@@ -10,6 +10,7 @@ import FAQPage from "./pages/FAQPage";
 import ProfilePage from "./pages/ProfilePage";
 import LoginPage from "./pages/LoginPage";
 import SignUpPage from "./pages/SignUpPage";
+import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import HospitalDashboard from "./pages/HospitalDashboard";
 import RoleRoute, { RequireAuth } from "../components/RoleRoute";
@@ -54,6 +55,7 @@ export default function App() {
           }
         />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/signup" element={<SignUpPage />} />
         <Route
           path="/admin"

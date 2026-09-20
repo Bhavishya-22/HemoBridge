@@ -157,43 +157,172 @@ function NotificationBell() {
 export default function Navbar() {
   const navigate = useNavigate();
   const { user, isLoggedIn, checkingAuth, logout } = useAuth();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const links = getNavLinksForRole(user?.role, isLoggedIn);
 
+  // Close mobile drawer on route change or ESC
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") setMobileMenuOpen(false);
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
+  // Lock body scroll when mobile drawer is open
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [mobileMenuOpen]);
+
   const handleLogout = async () => {
+    setMobileMenuOpen(false);
     await logout();
     navigate("/login");
   };
 
   return (
-    <nav className="nav">
-      <Link to="/" className="nav-logo">
-        <div className="nav-logo-icon">🩸</div>
-        <span className="nav-logo-text">
-          Blood<span>Bank</span>
-        </span>
-      </Link>
+    <>
+      <nav className="nav">
+        <Link to="/" className="nav-logo" onClick={() => setMobileMenuOpen(false)}>
+          <div className="nav-logo-icon">🩸</div>
+          <span className="nav-logo-text">
+            Blood<span>Bank</span>
+          </span>
+        </Link>
 
-      <div className="nav-links">
-        {links.map((link) => (
-          <Link key={link.path} to={link.path}>
-            {link.name}
-          </Link>
-        ))}
-      </div>
+        {/* Desktop Navigation Links */}
+        <div className="nav-links">
+          {links.map((link) => (
+            <Link key={link.path} to={link.path}>
+              {link.name}
+            </Link>
+          ))}
+        </div>
 
-      <div className="nav-actions">
-        {!checkingAuth && isLoggedIn && <NotificationBell />}
-        {!checkingAuth && !isLoggedIn && (
-          <Link to="/login">
-            <button className="btn-ghost">Login</button>
-          </Link>
-        )}
-        {!checkingAuth && isLoggedIn && (
-          <button className="btn-ghost" onClick={handleLogout}>
-            Logout
+        {/* Header Right Actions */}
+        <div className="nav-actions">
+          {!checkingAuth && isLoggedIn && <NotificationBell />}
+          
+          <div className="nav-desktop-auth">
+            {!checkingAuth && !isLoggedIn && (
+              <Link to="/login">
+                <button className="btn-ghost">Login</button>
+              </Link>
+            )}
+            {!checkingAuth && isLoggedIn && (
+              <button className="btn-ghost" onClick={handleLogout}>
+                Logout
+              </button>
+            )}
+          </div>
+
+          {/* Mobile Hamburger Toggle Button */}
+          <button
+            type="button"
+            className={`nav-hamburger-btn ${mobileMenuOpen ? "open" : ""}`}
+            onClick={() => setMobileMenuOpen((prev) => !prev)}
+            aria-label="Toggle navigation menu"
+            aria-expanded={mobileMenuOpen}
+          >
+            <span className="hamburger-bar"></span>
+            <span className="hamburger-bar"></span>
+            <span className="hamburger-bar"></span>
           </button>
+        </div>
+      </nav>
+
+      {/* Mobile Drawer Overlay */}
+      {mobileMenuOpen && (
+        <div
+          className="nav-drawer-overlay"
+          onClick={() => setMobileMenuOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Mobile Slide-in Drawer */}
+      <div
+        className={`nav-mobile-drawer ${mobileMenuOpen ? "drawer-open" : ""}`}
+        role="dialog"
+        aria-label="Mobile Navigation"
+      >
+        <div className="drawer-header">
+          <div className="drawer-brand">
+            <span className="drawer-logo-icon">🩸</span>
+            <span className="drawer-logo-text">Blood<span>Bank</span></span>
+          </div>
+          <button
+            type="button"
+            className="drawer-close-btn"
+            onClick={() => setMobileMenuOpen(false)}
+            aria-label="Close menu"
+          >
+            ✕
+          </button>
+        </div>
+
+        {isLoggedIn && user && (
+          <div className="drawer-user-card">
+            <div className="drawer-avatar">
+              {user.fullName ? user.fullName[0].toUpperCase() : "U"}
+            </div>
+            <div className="drawer-user-info">
+              <div className="drawer-user-name">{user.fullName || user.username}</div>
+              <div className="drawer-user-role">
+                <span className="role-tag">{user.role?.toUpperCase()}</span>
+                {user.bloodGroup && <span className="blood-tag">{user.bloodGroup}</span>}
+              </div>
+            </div>
+          </div>
         )}
+
+        <div className="drawer-links">
+          {links.map((link) => (
+            <Link
+              key={link.path}
+              to={link.path}
+              className="drawer-link-item"
+              onClick={() => setMobileMenuOpen(false)}
+            >
+              <span>{link.name}</span>
+              <span className="drawer-link-arrow">→</span>
+            </Link>
+          ))}
+        </div>
+
+        <div className="drawer-footer">
+          {!checkingAuth && !isLoggedIn && (
+            <div className="drawer-auth-buttons">
+              <Link
+                to="/login"
+                className="drawer-btn-primary"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Sign In
+              </Link>
+              <Link
+                to="/register"
+                className="drawer-btn-secondary"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Create Account
+              </Link>
+            </div>
+          )}
+          {!checkingAuth && isLoggedIn && (
+            <button className="drawer-btn-logout" onClick={handleLogout}>
+              Log Out
+            </button>
+          )}
+        </div>
       </div>
-    </nav>
+    </>
   );
 }

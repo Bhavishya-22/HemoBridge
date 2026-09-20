@@ -26,17 +26,17 @@ exports.getPublicStats = asyncHandler(async (req, res) => {
   const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
   const [totalDonors, livesSupported, bloodGroupAgg] = await Promise.all([
-    // Count all registered donors (active, not blocked)
-    User.countDocuments({ role: 'donor', isBlocked: false }),
+    // Count all registered donors (active, not blocked, profile completed)
+    User.countDocuments({ role: 'donor', isBlocked: false, profileCompleted: true }),
 
     // Count requests that reached a completed state (lives genuinely helped)
     BloodRequest.countDocuments({
       status: { $in: ['final_completed', 'blood_test_scheduled', 'admin_verified'] },
     }),
 
-    // Aggregate donors by blood group
+    // Aggregate donors by blood group (only onboarded donors with bloodGroup set)
     User.aggregate([
-      { $match: { role: 'donor', isBlocked: false, bloodGroup: { $in: BLOOD_GROUPS } } },
+      { $match: { role: 'donor', isBlocked: false, profileCompleted: true, bloodGroup: { $in: BLOOD_GROUPS } } },
       { $group: { _id: '$bloodGroup', count: { $sum: 1 } } },
     ]),
   ]);

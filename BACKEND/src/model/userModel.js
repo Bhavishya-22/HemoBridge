@@ -37,8 +37,23 @@ const userSchema = new mongoose.Schema(
 
     password: {
       type: String,
-      required: true,
+      required: function () {
+        return this.authProvider !== 'google';
+      },
       select: false, // never returned in queries by default
+    },
+
+    // ─── Auth Provider ──────────────────────────────────────────
+    authProvider: {
+      type: String,
+      enum: ['local', 'google'],
+      default: 'local',
+    },
+
+    googleId: {
+      type: String,
+      unique: true,
+      sparse: true,
     },
 
     role: {
@@ -174,6 +189,17 @@ const userSchema = new mongoose.Schema(
       type: String,
       select: false, // never exposed in queries
     },
+
+    // ─── Password Reset OTP ─────────────────────────────────────
+    resetOTP: {
+      type: String,
+      select: false,
+    },
+
+    resetOTPExpiry: {
+      type: Date,
+      select: false,
+    },
   },
   {
     timestamps: true,
@@ -188,7 +214,7 @@ userSchema.index({ bloodGroup: 1, availabilityStatus: 1 }); // compound — dono
 userSchema.index({ hospitalVerificationStatus: 1 }); 
 // Password Hashing
 userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) return;
+  if (!this.isModified("password") || !this.password) return;
 
   this.password = await bcrypt.hash(this.password, 10);
 });
