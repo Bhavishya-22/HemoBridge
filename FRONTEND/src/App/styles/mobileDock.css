@@ -1,0 +1,128 @@
+/* ── MOBILE QUICK ACTION DOCK ── */
+.mobile-quick-dock {
+  position: fixed;
+  bottom: 20px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 9990;
+  padding: 0 16px;
+  pointer-events: none; /* Only the inner pill receives touch */
+  animation: fadeInUp 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dock-glass-pill {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  border-radius: 9999px;
+  padding: 6px 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35), 0 2px 8px rgba(220, 38, 38, 0.2);
+  max-width: 90vw;
+}
+
+.dock-action-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 9999px;
+  border: none;
+  background: transparent;
+  color: #f8fafc;
+  font-family: var(--font-display, 'Sora', sans-serif);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.dock-icon {
+  font-size: 1rem;
+}
+
+.dock-label {
+  font-size: 0.82rem;
+}
+
+.dock-request-btn {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+}
+
+.dock-request-btn:active {
+  transform: scale(0.95);
+  background: #991b1b;
+}
+
+.dock-donate-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+}
+
+.dock-donate-btn:active {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(0.95);
+}
+
+.dock-sos-btn {
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  color: #fca5a5;
+  position: relative;
+}
+
+.dock-sos-btn:active {
+  background: rgba(239, 68, 68, 0.4);
+  transform: scale(0.95);
+}
+
+.dock-pulse-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 100%;
+  height: 100%;
+  border-radius: 9999px;
+  transform: translate(-50%, -50%);
+  border: 1px solid rgba(239, 68, 68, 0.6);
+  animation: pulseRadar 2s infinite;
+  pointer-events: none;
+}
+
+.dock-divider {
+  width: 1px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Hide on desktop and larger screens */
+@media (min-width: 769px) {
+  .mobile-quick-dock {
+    display: none !important;
+  }
+}
+
+/* On very compact phone screens */
+@media (max-width: 380px) {
+  .dock-glass-pill {
+    padding: 5px 8px;
+    gap: 4px;
+  }
+  .dock-action-btn {
+    padding: 7px 10px;
+    font-size: 0.78rem;
+  }
+  .dock-label {
+    font-size: 0.75rem;
+  }
+}

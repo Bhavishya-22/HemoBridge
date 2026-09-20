@@ -1,20 +1,144 @@
 /* ── HOW IT WORKS ── */
-  .how-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; }
-  .how-card {
-    background: var(--surface); border-radius: var(--radius-xl);
-    padding: 2.5rem; border: 1.5px solid var(--border);
-  }
-  .how-card-title { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; color: var(--slate); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px; }
-  .how-steps { display: flex; flex-direction: column; gap: 1.1rem; }
-  .how-step { display: flex; align-items: flex-start; gap: 12px; }
-  .how-step-num {
-    width: 28px; height: 28px; min-width: 28px; border-radius: 50%;
-    background: var(--crimson); color: var(--white);
-    font-weight: 700; font-size: 0.8rem; display: flex; align-items: center; justify-content: center;
-  }
-  .how-step-text { font-size: 0.9rem; color: var(--muted); padding-top: 4px; }
+.how-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2.5rem;
+  margin-top: 1rem;
+}
 
-  @media (max-width: 768px) {
-    .how-grid { grid-template-columns: 1fr; gap: 1.5rem; }
-    .how-card { padding: 1.75rem 1.25rem; border-radius: var(--radius-lg); }
+.how-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border-radius: var(--radius-xl);
+  padding: 2.75rem 2.5rem;
+  border: 1.5px solid var(--border);
+  box-shadow: 0 8px 24px rgba(185, 28, 28, 0.05);
+  transition: all 0.3s var(--ease-smooth);
+  position: relative;
+}
+
+.how-card:hover {
+  transform: translateY(-4px);
+  border-color: var(--rose);
+  box-shadow: 0 16px 36px rgba(185, 28, 28, 0.12);
+}
+
+.how-card-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.35rem;
+  color: var(--slate);
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  letter-spacing: -0.01em;
+}
+
+.how-card-title span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--rose-light);
+  font-size: 1.25rem;
+}
+
+.how-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  position: relative;
+}
+
+.how-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  position: relative;
+}
+
+/* Connecting line between steps */
+.how-step:not(:last-child)::after {
+  content: '';
+  position: absolute;
+  left: 17px;
+  top: 36px;
+  bottom: -24px;
+  width: 2px;
+  background: linear-gradient(180deg, #fecdd3 0%, rgba(254, 205, 211, 0.2) 100%);
+}
+
+.how-step-num {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+  color: var(--white);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.9rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(185, 28, 28, 0.3);
+  position: relative;
+  z-index: 2;
+  transition: transform 0.25s ease;
+}
+
+.how-step:hover .how-step-num {
+  transform: scale(1.12);
+  box-shadow: 0 0 0 4px rgba(225, 29, 72, 0.25);
+}
+
+.how-step-text {
+  font-size: 0.96rem;
+  color: var(--slate-mid);
+  line-height: 1.6;
+  padding-top: 4px;
+}
+
+@media (max-width: 900px) {
+  .how-grid {
+    grid-template-columns: 1fr;
+    gap: 2rem;
   }
+}
+
+@media (max-width: 540px) {
+  .how-card {
+    padding: 1.75rem 1.25rem;
+    border-radius: var(--radius-lg);
+  }
+  .how-card-title {
+    font-size: 1.15rem;
+    margin-bottom: 1.5rem;
+  }
+  .how-card-title span {
+    width: 36px;
+    height: 36px;
+    font-size: 1.1rem;
+  }
+  .how-steps {
+    gap: 1.35rem;
+  }
+  .how-step-text {
+    font-size: 0.9rem;
+  }
+  .how-step:not(:last-child)::after {
+    left: 15px;
+    top: 32px;
+    bottom: -18px;
+  }
+  .how-step-num {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    font-size: 0.82rem;
+  }
+}

@@ -23,6 +23,8 @@ const apiPrefixes = [
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: true,
+    allowedHosts: true,
     proxy: Object.fromEntries(
       apiPrefixes.map((prefix) => [
         `/${prefix}`,

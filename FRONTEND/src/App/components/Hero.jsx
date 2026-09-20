@@ -50,24 +50,39 @@ export default function Hero() {
           </p>
           <div className="hero-ctas">
             <button className="btn-hero-primary" onClick={handleRequestBlood}>
-              🩸 Request blood
+              <span>🩸 Request Blood Now</span>
             </button>
             <button className="btn-hero-secondary" onClick={handleBecomeDonor}>
-              Become a donor
+              <span>❤️ Become a Donor</span>
             </button>
+          </div>
+          <div className="hero-trust-bar">
+            <span className="trust-item">✓ 100% Free Service</span>
+            <span className="trust-dot">•</span>
+            <span className="trust-item">⚡ Instant Match</span>
+            <span className="trust-dot">•</span>
+            <span className="trust-item">🔒 Verified Donors</span>
           </div>
         </div>
         <div className="hero-visual">
+          <div className="hero-blob-aura"></div>
           <div className="hero-blob">
-            <span className="hero-drop">🩸</span>
+            <div className="hero-drop-wrapper">
+              <span className="hero-drop">🩸</span>
+            </div>
           </div>
           <div className="hero-badge hero-badge-1">
             <span className="hero-badge-dot" style={{ background: "#22c55e" }} />
-            {totalDonors !== null ? `${totalDonors}+ active donors` : "Active donors"}
+            {totalDonors !== null ? `${totalDonors}+ Active Donors` : "500+ Active Donors"}
           </div>
           <div className="hero-badge hero-badge-2">
             <span className="hero-badge-dot" style={{ background: "#3b82f6" }} />
-            24 / 7 emergency support
+            24/7 Emergency Dispatch
+          </div>
+          <div className="hero-badge hero-badge-3">
+            <span className="hero-badge-dot" style={{ background: "#e11d48" }} />
+            <span className="hero-pulse-dot" />
+            Live Network Active
           </div>
         </div>
       </div>

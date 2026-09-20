@@ -10,6 +10,7 @@ import Awareness from "../components/Awareness";
 import FAQ from "../components/FAQ";
 import CTA from "../components/CTA";
 import Footer from "../components/Footer";
+import MobileQuickDock from "../components/MobileQuickDock";
 
 export default function Home() {
   return (
@@ -26,6 +27,7 @@ export default function Home() {
       <FAQ />
       <CTA />
       <Footer />
+      <MobileQuickDock />
     </>
   );
 }

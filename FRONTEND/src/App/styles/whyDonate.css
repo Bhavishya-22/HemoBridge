@@ -1,10 +1,81 @@
- /* ── WHY DONATE ── */
-  .why-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.25rem; }
-  .why-card {
-    background: var(--white); border: 1.5px solid var(--border); border-radius: var(--radius-lg);
-    padding: 1.75rem; transition: all 0.25s;
+/* ── WHY DONATE ── */
+.why-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.5rem;
+}
+
+.why-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
+  border: 1.5px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2.25rem 1.75rem;
+  transition: all 0.3s var(--ease-smooth);
+  box-shadow: 0 4px 16px rgba(185, 28, 28, 0.04);
+  position: relative;
+  overflow: hidden;
+}
+
+.why-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: transparent;
+  transition: background 0.3s ease;
+}
+
+.why-card:hover {
+  border-color: var(--rose);
+  box-shadow: 0 12px 30px rgba(185, 28, 28, 0.12);
+  transform: translateY(-5px);
+}
+
+.why-card:hover::after {
+  background: linear-gradient(90deg, #b91c1c, #f43f5e);
+}
+
+.why-icon {
+  font-size: 2.2rem;
+  margin-bottom: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  background: var(--rose-light);
+  transition: transform 0.3s ease;
+}
+
+.why-card:hover .why-icon {
+  transform: scale(1.1) rotate(6deg);
+}
+
+.why-title {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.15rem;
+  color: var(--slate);
+  margin-bottom: 0.65rem;
+  letter-spacing: -0.01em;
+}
+
+.why-desc {
+  font-size: 0.92rem;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+@media (max-width: 480px) {
+  .why-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
   }
-  .why-card:hover { border-color: var(--crimson); box-shadow: var(--shadow-md); }
-  .why-icon { font-size: 2rem; margin-bottom: 0.75rem; display: block; }
-  .why-title { font-family: var(--font-display); font-weight: 600; font-size: 1rem; color: var(--slate); margin-bottom: 0.5rem; }
-  .why-desc { font-size: 0.875rem; color: var(--muted); line-height: 1.65; }
+  .why-card {
+    padding: 1.5rem 1.25rem;
+  }
+}

@@ -18,6 +18,7 @@ export default function GoogleAuthButton({
   );
   const [gisMounted, setGisMounted] = useState(false);
   const [currentOrigin, setCurrentOrigin] = useState("");
+  const [copied, setCopied] = useState(false);
   const initAttempted = useRef(false);
 
   useEffect(() => {
@@ -242,27 +243,50 @@ export default function GoogleAuthButton({
               <div style={{
                 background: "#f1f5f9",
                 borderRadius: "8px",
-                padding: "10px 14px",
+                padding: "12px 14px",
                 marginBottom: "14px",
                 fontSize: "0.85rem",
                 color: "#334155"
               }}>
-                <div><strong>Client ID:</strong> {effectiveClientId ? "✅ Configured (" + effectiveClientId.slice(0, 12) + "...)" : "❌ Not detected (check .env files)"}</div>
-                <div><strong>Active Origin:</strong> <code>{currentOrigin || "http://localhost:5173"}</code></div>
+                <div style={{ marginBottom: "6px" }}><strong>Client ID:</strong> {effectiveClientId ? "✅ Configured (" + effectiveClientId.slice(0, 12) + "...)" : "❌ Not detected (check .env files)"}</div>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "6px" }}>
+                  <div><strong>Active Origin:</strong> <code style={{ wordBreak: "break-all" }}>{currentOrigin || "http://localhost:5173"}</code></div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (currentOrigin) {
+                        navigator.clipboard?.writeText(currentOrigin);
+                        setCopied(true);
+                        setTimeout(() => setCopied(false), 2500);
+                      }
+                    }}
+                    style={{
+                      background: copied ? "#16a34a" : "#475569",
+                      color: "#fff",
+                      border: "none",
+                      borderRadius: "4px",
+                      padding: "3px 8px",
+                      fontSize: "0.75rem",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {copied ? "✓ Copied!" : "Copy Origin"}
+                  </button>
+                </div>
               </div>
 
               <div className="google-modal-guide">
                 <div className="guide-step">
                   <span className="step-num">1</span>
-                  <span>Save changes in your <code>.env</code> files with <strong>Ctrl + S</strong></span>
+                  <span>Open <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer" style={{ color: "#2563eb", textDecoration: "underline" }}>Google Cloud Credentials</a></span>
                 </div>
                 <div className="guide-step">
                   <span className="step-num">2</span>
-                  <span>In Google Console, ensure <code>{currentOrigin || "http://localhost:5173"}</code> is in <strong>Authorized JavaScript Origins</strong></span>
+                  <span>Click your Web Client ID and add <code>{currentOrigin || "http://localhost:5173"}</code> under <strong>Authorized JavaScript origins</strong></span>
                 </div>
                 <div className="guide-step">
                   <span className="step-num">3</span>
-                  <span>Restart frontend (<code>npm run dev</code>) and backend (<code>npm start</code>)</span>
+                  <span>Save changes in Google Console (takes 2-5 mins to activate)</span>
                 </div>
               </div>
 

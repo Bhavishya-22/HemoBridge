@@ -71,7 +71,19 @@ try {
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || CLIENT_ORIGINS.includes(origin.replace(/\/$/, ''))) {
+      if (!origin) return callback(null, true);
+      const cleanOrigin = origin.replace(/\/$/, '');
+      const isAllowed =
+        CLIENT_ORIGINS.includes(cleanOrigin) ||
+        cleanOrigin.includes('localhost') ||
+        cleanOrigin.includes('127.0.0.1') ||
+        cleanOrigin.endsWith('.devtunnels.ms') ||
+        cleanOrigin.endsWith('.github.dev') ||
+        cleanOrigin.endsWith('.app.github.dev') ||
+        cleanOrigin.endsWith('.tunnel.app') ||
+        /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(cleanOrigin);
+
+      if (isAllowed) {
         callback(null, true);
       } else {
         callback(new Error(`Origin ${origin} not allowed by CORS`));

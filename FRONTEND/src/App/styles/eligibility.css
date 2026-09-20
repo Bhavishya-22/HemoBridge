@@ -1,15 +1,115 @@
-  /* ── ELIGIBILITY ── */
-  .eligibility-bg { background: var(--surface); }
-  .elig-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; }
-  .elig-list { display: flex; flex-direction: column; gap: 0.85rem; margin-bottom: 2rem; }
-  .elig-item { display: flex; align-items: center; gap: 12px; font-size: 0.95rem; color: var(--slate-mid); }
-  .elig-check { width: 24px; height: 24px; border-radius: 50%; background: #dcfce7; color: #16a34a; font-size: 0.85rem; display: flex; align-items: center; justify-content: center; font-weight: 700; flex-shrink: 0; }
-  .elig-visual { background: var(--white); border-radius: var(--radius-xl); padding: 2.5rem; border: 1.5px solid var(--border); text-align: center; }
-  .elig-big-num { font-family: var(--font-display); font-size: 5rem; font-weight: 700; color: var(--crimson); line-height: 1; }
-  .elig-big-label { font-size: 0.9rem; color: var(--muted); margin-top: 0.5rem; }
+/* ── ELIGIBILITY ── */
+.eligibility-bg {
+  background: linear-gradient(180deg, #fff7f7 0%, #ffffff 50%, #fff7f7 100%);
+}
 
-  @media (max-width: 768px) {
-    .elig-layout { grid-template-columns: 1fr; gap: 2rem; }
-    .elig-visual { padding: 1.75rem 1.25rem; }
-    .elig-big-num { font-size: 4rem; }
+.elig-layout {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 3.5rem;
+  align-items: center;
+}
+
+.elig-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  margin-bottom: 2.25rem;
+}
+
+.elig-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 1rem;
+  color: var(--slate-mid);
+  font-weight: 500;
+  transition: transform 0.2s ease;
+}
+
+.elig-item:hover {
+  transform: translateX(4px);
+  color: var(--slate);
+}
+
+.elig-check {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #dcfce7;
+  color: #16a34a;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(22, 163, 74, 0.2);
+}
+
+.elig-visual {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(14px);
+  border-radius: var(--radius-xl);
+  padding: 3.25rem 2.5rem;
+  border: 1.5px solid var(--border);
+  text-align: center;
+  box-shadow: 0 16px 36px rgba(185, 28, 28, 0.08);
+  position: relative;
+  overflow: hidden;
+  transition: transform 0.3s var(--ease-smooth);
+}
+
+.elig-visual:hover {
+  transform: scale(1.02);
+  border-color: var(--rose);
+}
+
+.elig-big-num {
+  font-family: var(--font-display);
+  font-size: clamp(4rem, 7vw, 5.5rem);
+  font-weight: 800;
+  background: linear-gradient(135deg, #b91c1c 0%, #e11d48 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  margin-bottom: 0.5rem;
+  display: inline-block;
+}
+
+.elig-big-label {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--slate-mid);
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 900px) {
+  .elig-layout {
+    grid-template-columns: 1fr;
+    gap: 2.5rem;
   }
+  .elig-visual {
+    padding: 2.25rem 1.5rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .elig-item {
+    font-size: 0.92rem;
+    gap: 10px;
+  }
+  .elig-check {
+    width: 24px;
+    height: 24px;
+    font-size: 0.8rem;
+  }
+  .elig-big-num {
+    font-size: 3.5rem;
+  }
+  .elig-visual {
+    padding: 1.75rem 1rem;
+    border-radius: var(--radius-lg);
+  }
+}
