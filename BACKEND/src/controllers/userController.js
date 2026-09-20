@@ -995,3 +995,40 @@ exports.resetPassword = asyncHandler(async (req, res) => {
         message: "Password reset successfully. You can now log in with your new password."
     });
 });
+
+// ─── Diagnostic Mail Test Endpoint ───────────────────────────────────────────
+exports.testEmailDelivery = asyncHandler(async (req, res) => {
+    const to = req.query.to || req.body.to || process.env.SMTP_FROM || 'bloodlink.supprot1@gmail.com';
+    const result = await sendMailHelper({
+        to,
+        subject: "BloodLink SMTP Diagnostic Test",
+        html: `
+            <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 24px; border: 1px solid #f1c5c5; border-radius: 12px; background: #fff7f7;">
+                <h2 style="color: #b91c1c; margin-top: 0;">🩸 BloodLink SMTP Diagnostic Test</h2>
+                <p style="color: #1e293b; font-size: 15px;">Congratulations! If you are reading this email in your inbox, your SMTP email delivery is <strong>100% operational</strong>!</p>
+                <p style="color: #64748b; font-size: 13px;">Sent at: ${new Date().toLocaleString()}</p>
+                <p style="color: #64748b; font-size: 13px;">Host: ${process.env.SMTP_HOST || 'Gmail Service'}</p>
+            </div>
+        `,
+        text: "Congratulations! Your BloodLink SMTP email delivery is operational!",
+        logTitle: "Diagnostic Test"
+    });
+
+    if (result.delivered) {
+        return res.status(200).json({
+            success: true,
+            delivered: true,
+            message: `Email successfully delivered to ${to}. Please check your Gmail Inbox (and Spam folder).`,
+            messageId: result.messageId
+        });
+    } else {
+        return res.status(500).json({
+            success: false,
+            delivered: false,
+            message: `Failed to deliver email to ${to}.`,
+            error: result.error,
+            fallback: result.fallback,
+            details: result.details
+        });
+    }
+});

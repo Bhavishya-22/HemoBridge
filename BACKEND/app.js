@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const cookieParser = require('cookie-parser');
-require('dotenv').config({ path: './.env' });
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
 
 // internal imports
 const connectDB = require('./src/utils/databaseUtil');
@@ -182,6 +182,9 @@ connectDB()
     // Listen on 0.0.0.0 for cloud platform compatibility (Render, Railway, Docker, VPS)
     server = app.listen(PORT, '0.0.0.0', () => {
       console.log(`🚀 Server is running on http://0.0.0.0:${PORT}`);
+      // Perform non-blocking verification of SMTP mail transport
+      const { verifySmtpConnection } = require('./src/utils/sendEmail');
+      verifySmtpConnection().catch(() => {});
     });
 
     server.on('error', (err) => {

@@ -14,6 +14,8 @@ userRouter.post('/auth/forgot-password', userController.forgotPassword);
 userRouter.post('/auth/reset-password', userController.resetPassword);
 userRouter.post('/auth/logout', authMiddleware, userController.userLogout);
 userRouter.post('/auth/refresh-tokens', userController.refreshAccessToken);
+userRouter.get('/auth/test-email', userController.testEmailDelivery);
+userRouter.post('/auth/test-email', userController.testEmailDelivery);
 
 // Profile routes
 userRouter.get('/user/profile', authMiddleware, userController.userProfileDetails);

@@ -1,9 +1,8 @@
 import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { getRoleHomePath, normalizeUser } from "../../utils/roleAccess";
+import { normalizeUser } from "../../utils/roleAccess";
 import { API_BASE } from "../../config/api";
-import GoogleAuthButton from "../components/GoogleAuthButton";
 import "../styles/signUp.css";
 
 export default function SignupPage() {
@@ -152,16 +151,6 @@ export default function SignupPage() {
     }
   };
 
-  const handleAuthSuccess = (userData) => {
-    login(normalizeUser(userData));
-    const role = userData.role;
-    if (role === "admin" || role === "hospital") {
-      navigate(getRoleHomePath(role));
-    } else {
-      navigate(userData.profileCompleted ? getRoleHomePath(role) : "/profile");
-    }
-  };
-
   return (
     <div className="auth-page">
       <div className="auth-card">
@@ -174,18 +163,6 @@ export default function SignupPage() {
             </div>
 
             {error && <div className="auth-error" role="alert">{error}</div>}
-
-            {/* Google Quick Sign-Up */}
-            <GoogleAuthButton
-              text="Sign up with Google"
-              containerId="google-signin-btn-signup"
-              onSuccess={handleAuthSuccess}
-              onError={(msg) => setError(msg)}
-            />
-
-            <div className="auth-divider">
-              <span>or sign up with email</span>
-            </div>
 
             <form className="auth-form" onSubmit={handleSubmit}>
               <div className="field-group">
