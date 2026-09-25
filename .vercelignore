@@ -1,0 +1,9 @@
+node_modules
+*.log
+.git
+.github
+.vscode
+.idea
+BACKEND
+tests
+scratch

@@ -81,6 +81,7 @@ app.use(
         cleanOrigin.endsWith('.github.dev') ||
         cleanOrigin.endsWith('.app.github.dev') ||
         cleanOrigin.endsWith('.tunnel.app') ||
+        cleanOrigin.endsWith('.vercel.app') ||
         /^https?:\/\/(192\.168\.|10\.|172\.(1[6-9]|2[0-9]|3[0-1])\.)/.test(cleanOrigin);
 
       if (isAllowed) {
