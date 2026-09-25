@@ -1,32 +1,28 @@
 // sendEmail.js - Reusable email dispatch utility supporting Brevo, Gmail SMTP, and Dev Console fallback
 
 const getTransporterConfig = () => {
-    const isGenericSmtp =
-        process.env.SMTP_HOST &&
-        !process.env.SMTP_HOST.includes('YOUR_') &&
-        (process.env.SMTP_USER || process.env.SMTP_EMAIL) &&
-        (process.env.SMTP_PASS || process.env.SMTP_PASSWORD);
+    const emailUser = (process.env.SMTP_USER || process.env.SMTP_EMAIL || process.env.SMTP_FROM || '').trim();
+    const emailPass = (process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '').trim().replace(/\s+/g, '');
+    const host = (process.env.SMTP_HOST || '').trim().toLowerCase();
 
-    const isGmailSmtp =
-        process.env.SMTP_EMAIL &&
-        !process.env.SMTP_EMAIL.includes('YOUR_GMAIL') &&
-        process.env.SMTP_PASSWORD &&
-        !process.env.SMTP_PASSWORD.includes('YOUR_GMAIL');
+    // Automatically detect Gmail if user has @gmail.com or host is gmail
+    const isGmail =
+        emailPass &&
+        !emailPass.includes('YOUR_') &&
+        (
+            host.includes('gmail') ||
+            emailUser.toLowerCase().includes('@gmail.com') ||
+            (process.env.SMTP_EMAIL && !process.env.SMTP_EMAIL.includes('YOUR_GMAIL'))
+        );
 
-    if (isGenericSmtp) {
-        const port = parseInt(process.env.SMTP_PORT, 10) || 587;
+    if (isGmail) {
         return {
-            type: 'generic',
+            type: 'gmail',
             config: {
-                host: process.env.SMTP_HOST.trim(),
-                port,
-                secure: port === 465,
+                service: 'gmail',
                 auth: {
-                    user: (process.env.SMTP_USER || process.env.SMTP_EMAIL || '').trim(),
-                    pass: (process.env.SMTP_PASS || process.env.SMTP_PASSWORD || '').trim(),
-                },
-                tls: {
-                    rejectUnauthorized: false,
+                    user: emailUser,
+                    pass: emailPass,
                 },
                 connectionTimeout: 10000,
                 greetingTimeout: 10000,
@@ -35,14 +31,26 @@ const getTransporterConfig = () => {
         };
     }
 
-    if (isGmailSmtp) {
+    const isGenericSmtp =
+        host &&
+        !host.includes('YOUR_') &&
+        emailUser &&
+        emailPass;
+
+    if (isGenericSmtp) {
+        const port = parseInt(process.env.SMTP_PORT, 10) || 587;
         return {
-            type: 'gmail',
+            type: 'generic',
             config: {
-                service: 'gmail',
+                host,
+                port,
+                secure: port === 465,
                 auth: {
-                    user: (process.env.SMTP_EMAIL || process.env.SMTP_USER || '').trim(),
-                    pass: (process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '').trim().replace(/\s+/g, ''),
+                    user: emailUser,
+                    pass: emailPass,
+                },
+                tls: {
+                    rejectUnauthorized: false,
                 },
                 connectionTimeout: 10000,
                 greetingTimeout: 10000,
@@ -104,7 +112,7 @@ const sendMailHelper = async ({ to, subject, html, text, otp, logTitle = "Notifi
     if (otp) {
         console.log(`\n======================================================`);
         console.log(`🔑 ${logTitle.toUpperCase()} for ${to}: [ ${otp} ]`);
-        console.log(`   (Valid for 10 minutes | BloodLink Service)`);
+        console.log(`   (Valid for 10 minutes | HemoBridge Service)`);
         console.log(`======================================================\n`);
     } else {
         console.log(`\n📧 ${logTitle.toUpperCase()} dispatched to ${to}: "${subject}"`);
@@ -118,9 +126,9 @@ const sendMailHelper = async ({ to, subject, html, text, otp, logTitle = "Notifi
     try {
         const transporter = nodemailerModule.createTransport(transportInfo.config);
 
-        let sender = process.env.SMTP_FROM || process.env.SMTP_EMAIL || process.env.SMTP_USER || "noreply@bloodbank.com";
+        let sender = process.env.SMTP_FROM || process.env.SMTP_EMAIL || process.env.SMTP_USER || "hemobridge.support@gmail.com";
         sender = sender.trim();
-        const fromAddress = sender.includes('<') ? sender : `"BloodLink Support" <${sender}>`;
+        const fromAddress = sender.includes('<') ? sender : `"HemoBridge Support" <${sender}>`;
 
         const info = await transporter.sendMail({
             from: fromAddress,

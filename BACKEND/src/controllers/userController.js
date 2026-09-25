@@ -5,7 +5,7 @@ const crypto = require('crypto');
 const User = require('../model/userModel');
 const jwt = require("jsonwebtoken");
 
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = process.env.NODE_ENV === "production" || process.env.RENDER === "true" || !!process.env.RENDER_EXTERNAL_URL;
 const getAuthCookieOptions = (maxAge) => ({
     httpOnly: true,
     secure: isProduction,
@@ -109,23 +109,23 @@ exports.userRegister = asyncHandler(async (req, res) => {
     }
 
     // Send Registration OTP Email
-    const emailSubject = `Your BloodLink Registration OTP: ${otp}`;
+    const emailSubject = `Your HemoBridge Registration OTP: ${otp}`;
     const emailHtml = `
         <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
             <div style="text-align: center; margin-bottom: 24px;">
                 <span style="font-size: 42px;">🩸</span>
-                <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">BloodLink</h2>
+                <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">HemoBridge</h2>
                 <p style="color: #64748b; font-size: 13px; margin: 0;">Connecting Donors & Receivers, Saving Lives</p>
             </div>
             <p style="color: #1e293b; font-size: 15px; margin: 0 0 16px;">Hello <strong>${targetUser.fullName}</strong>,</p>
             <p style="color: #1e293b; font-size: 15px; line-height: 1.5; margin: 0 0 24px;">
-                Thank you for creating an account on <strong>BloodLink</strong>. Please use the 6-digit registration code below to verify your email and activate your account:
+                Thank you for creating an account on <strong>HemoBridge</strong>. Please use the 6-digit registration code below to verify your email and activate your account:
             </p>
             <div style="background: linear-gradient(135deg, #b91c1c 0%, #dc2626 100%); color: #fff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 16px; border-radius: 12px; margin: 0 0 24px; box-shadow: 0 4px 12px rgba(185, 28, 28, 0.25);">
                 ${otp}
             </div>
             <p style="color: #64748b; font-size: 13px; margin: 0 0 12px;">This verification code is valid for <strong>10 minutes</strong>.</p>
-            <p style="color: #94a3b8; font-size: 12px; margin: 0;">If you did not initiate this registration on BloodLink, please ignore this email.</p>
+            <p style="color: #94a3b8; font-size: 12px; margin: 0;">If you did not initiate this registration on HemoBridge, please ignore this email.</p>
         </div>
     `;
 
@@ -205,8 +205,27 @@ exports.verifyRegistrationOTP = asyncHandler(async (req, res) => {
     user.registrationOTPExpiry = undefined;
     await user.save({ validateBeforeSave: false });
 
-    // Generate JWT access & refresh tokens
-    const { accessToken, refreshToken } = await generateAccessandRefreshTokens(user._id);
+    // Send registration successful confirmation email
+    sendMailHelper({
+        to: user.email,
+        subject: "Registration Successful — Welcome to HemoBridge!",
+        html: `
+            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
+                <div style="text-align: center; margin-bottom: 24px;">
+                    <span style="font-size: 42px;">🩸</span>
+                    <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">HemoBridge</h2>
+                    <p style="color: #64748b; font-size: 13px; margin: 0;">Connecting Donors & Receivers, Saving Lives</p>
+                </div>
+                <p style="color: #1e293b; font-size: 15px; margin: 0 0 16px;">Hello <strong>${user.fullName}</strong>,</p>
+                <p style="color: #1e293b; font-size: 15px; line-height: 1.5; margin: 0 0 20px;">
+                    Congratulations! Your email has been verified and your <strong>HemoBridge</strong> account is now officially active.
+                </p>
+                <p style="color: #64748b; font-size: 13px; margin: 0 0 12px;">Next, please complete your profile details to start receiving matching donor notifications or submitting requests.</p>
+                <p style="color: #94a3b8; font-size: 12px; margin: 0;">Thank you for joining our mission.</p>
+            </div>
+        `,
+        logTitle: 'Registration Success Confirmation'
+    }).catch((err) => console.error('Error sending confirmation email:', err.message));
 
     return res
         .cookie("accessToken", accessToken, getAuthCookieOptions(15 * 60 * 1000))
@@ -266,12 +285,12 @@ exports.resendRegistrationOTP = asyncHandler(async (req, res) => {
 
     await sendMailHelper({
         to: user.email,
-        subject: `Your New BloodLink Registration OTP: ${otp}`,
+        subject: `Your New HemoBridge Registration OTP: ${otp}`,
         html: `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
                 <div style="text-align: center; margin-bottom: 24px;">
                     <span style="font-size: 42px;">🩸</span>
-                    <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">BloodLink</h2>
+                    <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">HemoBridge</h2>
                     <p style="color: #64748b; font-size: 13px; margin: 0;">Connecting Donors & Receivers, Saving Lives</p>
                 </div>
                 <p style="color: #1e293b; font-size: 15px; margin: 0 0 16px;">Hello <strong>${user.fullName}</strong>,</p>
@@ -347,12 +366,12 @@ exports.userLogin = asyncHandler(async (req, res) => {
 
         await sendMailHelper({
             to: isExistingUser.email,
-            subject: `Your BloodLink Registration OTP: ${otp}`,
+            subject: `Your HemoBridge Registration OTP: ${otp}`,
             html: `
                 <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
                     <div style="text-align: center; margin-bottom: 24px;">
                         <span style="font-size: 42px;">🩸</span>
-                        <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">BloodLink</h2>
+                        <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">HemoBridge</h2>
                         <p style="color: #64748b; font-size: 13px; margin: 0;">Connecting Donors & Receivers, Saving Lives</p>
                     </div>
                     <p style="color: #1e293b; font-size: 15px; margin: 0 0 16px;">Hello <strong>${isExistingUser.fullName}</strong>,</p>
@@ -650,19 +669,19 @@ exports.userUpdateProfile = asyncHandler(async (req, res) => {
                 ? "Hospital Partner"
                 : "Blood Donor";
 
-        const welcomeSubject = `Welcome to BloodLink — Thanks for registering in our website!`;
+        const welcomeSubject = `Welcome to HemoBridge — Thanks for registering in our website!`;
         const welcomeHtml = `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 36px 28px; background: #ffffff; border-radius: 16px; border: 1px solid #fee2e2; box-shadow: 0 4px 20px rgba(0,0,0,0.05);">
                 <div style="text-align: center; margin-bottom: 24px;">
                     <span style="font-size: 48px;">🩸</span>
                     <h1 style="color: #b91c1c; margin: 12px 0 4px; font-size: 26px; font-weight: 800;">Thanks for registering in our website!</h1>
-                    <p style="color: #64748b; font-size: 14px; margin: 0;">Welcome to the BloodLink community</p>
+                    <p style="color: #64748b; font-size: 14px; margin: 0;">Welcome to the HemoBridge community</p>
                 </div>
                 <p style="color: #1e293b; font-size: 15px; line-height: 1.6; margin: 0 0 16px;">
                     Dear <strong>${updatedUser.fullName}</strong>,
                 </p>
                 <p style="color: #1e293b; font-size: 15px; line-height: 1.6; margin: 0 0 16px;">
-                    Thank you for completing your profile on <strong>BloodLink</strong> as a <strong>${roleLabel}</strong>. Your profile details have been saved, and your account is now fully active!
+                    Thank you for completing your profile on <strong>HemoBridge</strong> as a <strong>${roleLabel}</strong>. Your profile details have been saved, and your account is now fully active!
                 </p>
                 <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 16px 20px; border-radius: 8px; margin: 0 0 24px;">
                     <p style="color: #991b1b; font-size: 14px; margin: 0; line-height: 1.5; font-weight: 500;">
@@ -677,7 +696,7 @@ exports.userUpdateProfile = asyncHandler(async (req, res) => {
                     You can review or update your profile details anytime from your account settings.
                 </p>
                 <div style="text-align: center; padding-top: 20px; border-top: 1px solid #f1f5f9;">
-                    <p style="color: #94a3b8; font-size: 12px; margin: 0;">BloodLink · Real-time Blood Donation & Hospital Network</p>
+                    <p style="color: #94a3b8; font-size: 12px; margin: 0;">HemoBridge · Real-time Blood Donation & Hospital Network</p>
                 </div>
             </div>
         `;
@@ -827,6 +846,32 @@ exports.googleLogin = asyncHandler(async (req, res) => {
                 isVerified: true,
                 role: 'donor',
             });
+
+            // Send Welcome Email for Google Registration
+            sendMailHelper({
+                to: user.email,
+                subject: `Welcome to HemoBridge, ${user.fullName}!`,
+                html: `
+                    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
+                        <div style="text-align: center; margin-bottom: 24px;">
+                            <span style="font-size: 42px;">🩸</span>
+                            <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">HemoBridge</h2>
+                            <p style="color: #64748b; font-size: 13px; margin: 0;">Connecting Donors & Receivers, Saving Lives</p>
+                        </div>
+                        <p style="color: #1e293b; font-size: 15px; margin: 0 0 16px;">Hello <strong>${user.fullName}</strong>,</p>
+                        <p style="color: #1e293b; font-size: 15px; line-height: 1.5; margin: 0 0 20px;">
+                            Your account on <strong>HemoBridge</strong> has been created and verified successfully via Google.
+                        </p>
+                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 0 0 20px;">
+                            <p style="margin: 0 0 6px; font-size: 14px; color: #475569;"><strong>Email:</strong> ${user.email}</p>
+                            <p style="margin: 0; font-size: 14px; color: #475569;"><strong>Role:</strong> ${user.role || 'Donor'}</p>
+                        </div>
+                        <p style="color: #64748b; font-size: 13px; margin: 0 0 12px;">Please make sure to complete your profile details to start receiving matching donor notifications or submitting requests.</p>
+                        <p style="color: #94a3b8; font-size: 12px; margin: 0;">Thank you for being part of our life-saving community.</p>
+                    </div>
+                `,
+                logTitle: 'Google Registration Welcome'
+            }).catch((err) => console.error('Error sending Google welcome email:', err.message));
         }
     }
 
@@ -912,10 +957,10 @@ exports.forgotPassword = asyncHandler(async (req, res) => {
     // Send OTP via email (or log to terminal in development if email not configured)
     await sendMailHelper({
         to: user.email,
-        subject: 'Password Reset OTP — BloodLink',
+        subject: 'Password Reset OTP — HemoBridge',
         html: `
             <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
-                <h2 style="color: #b91c1c; margin: 0 0 8px;">🩸 BloodLink</h2>
+                <h2 style="color: #b91c1c; margin: 0 0 8px;">🩸 HemoBridge</h2>
                 <p style="color: #1e293b; font-size: 15px; margin: 0 0 24px;">We received a request to reset your password. Use the OTP below:</p>
                 <div style="background: #b91c1c; color: #fff; font-size: 32px; font-weight: 700; letter-spacing: 8px; text-align: center; padding: 16px; border-radius: 12px; margin: 0 0 24px;">
                     ${otp}
@@ -998,19 +1043,19 @@ exports.resetPassword = asyncHandler(async (req, res) => {
 
 // ─── Diagnostic Mail Test Endpoint ───────────────────────────────────────────
 exports.testEmailDelivery = asyncHandler(async (req, res) => {
-    const to = req.query.to || req.body.to || process.env.SMTP_FROM || 'bloodlink.supprot1@gmail.com';
+    const to = req.query.to || req.body.to || process.env.SMTP_FROM || 'hemobridge.support@gmail.com';
     const result = await sendMailHelper({
         to,
-        subject: "BloodLink SMTP Diagnostic Test",
+        subject: "HemoBridge SMTP Diagnostic Test",
         html: `
             <div style="font-family: Arial, sans-serif; max-width: 500px; padding: 24px; border: 1px solid #f1c5c5; border-radius: 12px; background: #fff7f7;">
-                <h2 style="color: #b91c1c; margin-top: 0;">🩸 BloodLink SMTP Diagnostic Test</h2>
+                <h2 style="color: #b91c1c; margin-top: 0;">🩸 HemoBridge SMTP Diagnostic Test</h2>
                 <p style="color: #1e293b; font-size: 15px;">Congratulations! If you are reading this email in your inbox, your SMTP email delivery is <strong>100% operational</strong>!</p>
                 <p style="color: #64748b; font-size: 13px;">Sent at: ${new Date().toLocaleString()}</p>
                 <p style="color: #64748b; font-size: 13px;">Host: ${process.env.SMTP_HOST || 'Gmail Service'}</p>
             </div>
         `,
-        text: "Congratulations! Your BloodLink SMTP email delivery is operational!",
+        text: "Congratulations! Your HemoBridge SMTP email delivery is operational!",
         logTitle: "Diagnostic Test"
     });
 

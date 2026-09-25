@@ -277,8 +277,10 @@ export default function FAQPage() {
               <span>💉</span> Become a Donor
             </button>
             <div className="faq-support-helpline">
-              <span>Toll-free hotline:</span>
-              <strong>1800-123-456</strong>
+              <span>Helpline:</span>
+              <a href="tel:+917981802087" style={{ color: "inherit", textDecoration: "none" }}>
+                <strong>+91 7981802087</strong>
+              </a>
             </div>
           </div>
         </section>

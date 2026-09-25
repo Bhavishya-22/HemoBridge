@@ -40,7 +40,7 @@ export default function Hero() {
         <div>
           <div className="hero-eyebrow">
             <span className="hero-eyebrow-dot" />
-            India's trusted donor network
+            Community Blood Connection Platform
           </div>
           <h1 className="hero-h1">
             Every drop counts,<br />every <em>donor</em> matters
@@ -73,7 +73,7 @@ export default function Hero() {
           </div>
           <div className="hero-badge hero-badge-1">
             <span className="hero-badge-dot" style={{ background: "#22c55e" }} />
-            {totalDonors !== null ? `${totalDonors}+ Active Donors` : "500+ Active Donors"}
+            {totalDonors !== null ? `${totalDonors} Active Donors` : "Active Donor Network"}
           </div>
           <div className="hero-badge hero-badge-2">
             <span className="hero-badge-dot" style={{ background: "#3b82f6" }} />

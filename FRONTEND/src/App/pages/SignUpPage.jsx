@@ -28,6 +28,18 @@ export default function SignupPage() {
   );
   const [loading, setLoading] = useState(false);
   const [resendCooldown, setResendCooldown] = useState(0);
+  const [donorCount, setDonorCount] = useState(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/stats`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.success && data.totalDonors != null) {
+          setDonorCount(data.totalDonors);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Countdown timer for Resend OTP button
   useEffect(() => {
@@ -306,8 +318,9 @@ export default function SignupPage() {
         <div className="auth-visual-blob"></div>
         <div className="auth-visual-content">
           <div className="auth-visual-drop">🩸</div>
-          <div className="auth-visual-stat">500+ active donors</div>
-          <div className="auth-visual-stat">300+ lives saved</div>
+          <div className="auth-visual-stat">
+            {donorCount !== null ? `${donorCount} active donors` : "Verified donor network"}
+          </div>
           <div className="auth-visual-stat">24 / 7 real-time support</div>
         </div>
       </div>

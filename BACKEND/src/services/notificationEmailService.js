@@ -127,7 +127,7 @@ const getNotificationMetadata = (type, priority) => {
         case "receiver_thank_you_accepted":
         case "receiver_thank_you_all":
             return {
-                subject: "🎉 Blood Request Completed Successfully — BloodLink",
+                subject: "🎉 Blood Request Completed Successfully — HemoBridge",
                 badge: "REQUEST COMPLETED",
                 accentColor: "#16a34a",
                 icon: "🎉",
@@ -144,7 +144,7 @@ const getNotificationMetadata = (type, priority) => {
 
         default:
             return {
-                subject: priority === "critical" ? "🚨 Critical Alert from BloodLink" : "🔔 Notification from BloodLink",
+                subject: priority === "critical" ? "🚨 Critical Alert from HemoBridge" : "🔔 Notification from HemoBridge",
                 badge: priority === "critical" ? "CRITICAL ALERT" : "NOTIFICATION",
                 accentColor: priority === "critical" ? "#dc2626" : "#b91c1c",
                 icon: "🔔",
@@ -183,7 +183,7 @@ const dispatchNotificationEmail = async (notificationDoc) => {
                     <span style="display: inline-block; background: rgba(255,255,255,0.2); font-size: 11px; font-weight: 700; letter-spacing: 1px; padding: 4px 10px; border-radius: 20px; text-transform: uppercase;">
                         ${meta.badge}
                     </span>
-                    <h2 style="margin: 10px 0 0; font-size: 20px; font-weight: 800; color: #ffffff;">BloodLink Alert</h2>
+                    <h2 style="margin: 10px 0 0; font-size: 20px; font-weight: 800; color: #ffffff;">HemoBridge Alert</h2>
                 </div>
 
                 <!-- Content Area -->
@@ -202,7 +202,7 @@ const dispatchNotificationEmail = async (notificationDoc) => {
                     <div style="text-align: center; margin: 28px 0 20px;">
                         <a href="${clientUrl}" 
                            style="display: inline-block; background: ${meta.accentColor}; color: #ffffff; font-weight: 600; font-size: 14px; text-decoration: none; padding: 12px 28px; border-radius: 8px; box-shadow: 0 3px 10px rgba(0,0,0,0.15);">
-                            Open BloodLink & View Details →
+                            Open HemoBridge & View Details →
                         </a>
                     </div>
 
