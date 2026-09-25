@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { getRoleHomePath, normalizeUser } from "../../utils/roleAccess";
@@ -40,6 +40,18 @@ export default function ProfilePage() {
   const [successMessage, setSuccessMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [initializing, setInitializing] = useState(true);
+  const errorRef = useRef(null);
+
+  // Automatically scroll up to show the error whenever an error is triggered
+  useEffect(() => {
+    if (error) {
+      if (errorRef.current) {
+        errorRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+      } else {
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    }
+  }, [error]);
 
   const handleChange = (e) =>
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -270,8 +282,18 @@ export default function ProfilePage() {
         </div>
 
         {error && (
-          <div className="profile-error" role="alert">
-            {error}
+          <div className="profile-error" role="alert" style={{
+            scrollMarginTop: "5rem",
+            border: "1.5px solid #ef4444",
+            background: "#fef2f2",
+            padding: "0.9rem 1.1rem",
+            borderRadius: "8px",
+            marginBottom: "1.25rem",
+            color: "#991b1b",
+            fontWeight: "600",
+            fontSize: "0.95rem"
+          }}>
+            ⚠️ {error}
           </div>
         )}
 

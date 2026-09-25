@@ -14,6 +14,7 @@ import ForgotPasswordPage from "./pages/ForgotPasswordPage";
 import AdminDashboard from "./pages/AdminDashboard";
 import HospitalDashboard from "./pages/HospitalDashboard";
 import RoleRoute, { RequireAuth } from "../components/RoleRoute";
+import GlobalErrorWatcher from "../components/GlobalErrorWatcher";
 
 // Routes where the global Navbar should be hidden (they have their own sidebar)
 const DASHBOARD_PATHS = ["/admin", "/hospital"];
@@ -24,6 +25,7 @@ export default function App() {
 
   return (
     <>
+      <GlobalErrorWatcher />
       {!isDashboard && <Navbar />}
 
       <Routes>
