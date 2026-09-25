@@ -259,6 +259,9 @@ export default function SignupPage() {
               <p className="auth-sub">
                 We sent a 6-digit registration code to <strong>{form.email}</strong>.
               </p>
+              <div style={{ marginTop: "8px", padding: "8px 12px", background: "#fff7ed", borderRadius: "8px", border: "1px solid #fed7aa", fontSize: "0.82rem", color: "#9a3412" }}>
+                📩 <strong>Note:</strong> Please check your <strong>Spam / Junk</strong> folder as well in case the email was filtered there.
+              </div>
             </div>
 
             {infoMessage && <div className="auth-info" role="status">{infoMessage}</div>}

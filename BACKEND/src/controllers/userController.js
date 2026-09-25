@@ -205,27 +205,8 @@ exports.verifyRegistrationOTP = asyncHandler(async (req, res) => {
     user.registrationOTPExpiry = undefined;
     await user.save({ validateBeforeSave: false });
 
-    // Send registration successful confirmation email
-    sendMailHelper({
-        to: user.email,
-        subject: "Registration Successful — Welcome to HemoBridge!",
-        html: `
-            <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
-                <div style="text-align: center; margin-bottom: 24px;">
-                    <span style="font-size: 42px;">🩸</span>
-                    <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">HemoBridge</h2>
-                    <p style="color: #64748b; font-size: 13px; margin: 0;">Connecting Donors & Receivers, Saving Lives</p>
-                </div>
-                <p style="color: #1e293b; font-size: 15px; margin: 0 0 16px;">Hello <strong>${user.fullName}</strong>,</p>
-                <p style="color: #1e293b; font-size: 15px; line-height: 1.5; margin: 0 0 20px;">
-                    Congratulations! Your email has been verified and your <strong>HemoBridge</strong> account is now officially active.
-                </p>
-                <p style="color: #64748b; font-size: 13px; margin: 0 0 12px;">Next, please complete your profile details to start receiving matching donor notifications or submitting requests.</p>
-                <p style="color: #94a3b8; font-size: 12px; margin: 0;">Thank you for joining our mission.</p>
-            </div>
-        `,
-        logTitle: 'Registration Success Confirmation'
-    }).catch((err) => console.error('Error sending confirmation email:', err.message));
+    // Generate authentication tokens for the verified user
+    const { accessToken, refreshToken } = await generateAccessandRefreshTokens(user._id);
 
     return res
         .cookie("accessToken", accessToken, getAuthCookieOptions(15 * 60 * 1000))
@@ -234,6 +215,8 @@ exports.verifyRegistrationOTP = asyncHandler(async (req, res) => {
         .json({
             success: true,
             message: "Email verified successfully! Please complete your profile details.",
+            accessToken,
+            refreshToken,
             user: {
                 id: user._id,
                 username: user.username,
@@ -846,32 +829,6 @@ exports.googleLogin = asyncHandler(async (req, res) => {
                 isVerified: true,
                 role: 'donor',
             });
-
-            // Send Welcome Email for Google Registration
-            sendMailHelper({
-                to: user.email,
-                subject: `Welcome to HemoBridge, ${user.fullName}!`,
-                html: `
-                    <div style="font-family: 'Segoe UI', Arial, sans-serif; max-width: 500px; margin: 0 auto; padding: 32px 24px; background: #fff7f7; border-radius: 16px; border: 1px solid #f1c5c5;">
-                        <div style="text-align: center; margin-bottom: 24px;">
-                            <span style="font-size: 42px;">🩸</span>
-                            <h2 style="color: #b91c1c; margin: 6px 0 2px; font-size: 24px; font-weight: 800;">HemoBridge</h2>
-                            <p style="color: #64748b; font-size: 13px; margin: 0;">Connecting Donors & Receivers, Saving Lives</p>
-                        </div>
-                        <p style="color: #1e293b; font-size: 15px; margin: 0 0 16px;">Hello <strong>${user.fullName}</strong>,</p>
-                        <p style="color: #1e293b; font-size: 15px; line-height: 1.5; margin: 0 0 20px;">
-                            Your account on <strong>HemoBridge</strong> has been created and verified successfully via Google.
-                        </p>
-                        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin: 0 0 20px;">
-                            <p style="margin: 0 0 6px; font-size: 14px; color: #475569;"><strong>Email:</strong> ${user.email}</p>
-                            <p style="margin: 0; font-size: 14px; color: #475569;"><strong>Role:</strong> ${user.role || 'Donor'}</p>
-                        </div>
-                        <p style="color: #64748b; font-size: 13px; margin: 0 0 12px;">Please make sure to complete your profile details to start receiving matching donor notifications or submitting requests.</p>
-                        <p style="color: #94a3b8; font-size: 12px; margin: 0;">Thank you for being part of our life-saving community.</p>
-                    </div>
-                `,
-                logTitle: 'Google Registration Welcome'
-            }).catch((err) => console.error('Error sending Google welcome email:', err.message));
         }
     }
 
@@ -1052,7 +1009,7 @@ exports.testEmailDelivery = asyncHandler(async (req, res) => {
                 <h2 style="color: #b91c1c; margin-top: 0;">🩸 HemoBridge SMTP Diagnostic Test</h2>
                 <p style="color: #1e293b; font-size: 15px;">Congratulations! If you are reading this email in your inbox, your SMTP email delivery is <strong>100% operational</strong>!</p>
                 <p style="color: #64748b; font-size: 13px;">Sent at: ${new Date().toLocaleString()}</p>
-                <p style="color: #64748b; font-size: 13px;">Host: ${process.env.SMTP_HOST || 'Gmail Service'}</p>
+                <p style="color: #64748b; font-size: 13px;">Sender: ${process.env.SMTP_FROM || process.env.SMTP_USER || 'hemobridge.support@gmail.com'}</p>
             </div>
         `,
         text: "Congratulations! Your HemoBridge SMTP email delivery is operational!",
@@ -1067,7 +1024,7 @@ exports.testEmailDelivery = asyncHandler(async (req, res) => {
             messageId: result.messageId
         });
     } else {
-        return res.status(500).json({
+        return res.status(200).json({
             success: false,
             delivered: false,
             message: `Failed to deliver email to ${to}.`,
@@ -1076,4 +1033,30 @@ exports.testEmailDelivery = asyncHandler(async (req, res) => {
             details: result.details
         });
     }
+});
+
+// ─── SMTP Live Health Status Endpoint ─────────────────────────────────────────
+exports.smtpStatus = asyncHandler(async (req, res) => {
+    const { verifySmtpConnection, getTransporterConfig } = require('../utils/sendEmail');
+    const verification = await verifySmtpConnection();
+    const config = getTransporterConfig();
+
+    return res.status(200).json({
+        success: verification.success,
+        transportType: config ? config.type : 'none',
+        host: verification.host,
+        sender: verification.sender,
+        error: verification.error,
+        code: verification.code,
+        response: verification.response,
+        environmentVariables: {
+            hasSmtpUser: Boolean(process.env.SMTP_USER),
+            smtpUser: process.env.SMTP_USER || null,
+            hasSmtpPassword: Boolean(process.env.SMTP_PASSWORD || process.env.SMTP_PASS),
+            passwordCharacterLength: (process.env.SMTP_PASSWORD || process.env.SMTP_PASS || '').trim().replace(/\s+/g, '').length,
+            smtpFrom: process.env.SMTP_FROM || null,
+            smtpHost: process.env.SMTP_HOST || null,
+            smtpPort: process.env.SMTP_PORT || null,
+        }
+    });
 });

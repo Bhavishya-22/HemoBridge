@@ -162,6 +162,9 @@ export default function ForgotPasswordPage() {
               <p className="auth-sub">
                 We've sent a 6-digit code to <strong>{email}</strong>. Enter it below along with your new password.
               </p>
+              <div style={{ marginTop: "8px", padding: "8px 12px", background: "#fff7ed", borderRadius: "8px", border: "1px solid #fed7aa", fontSize: "0.82rem", color: "#9a3412" }}>
+                📩 <strong>Note:</strong> Please check your <strong>Spam / Junk</strong> folder as well in case the email was filtered there.
+              </div>
             </div>
 
             {error && <div className="auth-error" role="alert">{error}</div>}

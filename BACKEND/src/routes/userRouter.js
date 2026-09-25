@@ -16,6 +16,7 @@ userRouter.post('/auth/logout', authMiddleware, userController.userLogout);
 userRouter.post('/auth/refresh-tokens', userController.refreshAccessToken);
 userRouter.get('/auth/test-email', userController.testEmailDelivery);
 userRouter.post('/auth/test-email', userController.testEmailDelivery);
+userRouter.get('/auth/smtp-status', userController.smtpStatus);
 
 // Profile routes
 userRouter.get('/user/profile', authMiddleware, userController.userProfileDetails);
